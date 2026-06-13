@@ -300,6 +300,7 @@ let wrongGuessers = new Set();  // usernames who guessed wrong on current clue
 let followerCache = new Map();  // username.toLowerCase() → boolean
 let userIdCache   = new Map();  // login → userId
 let lastBotReplyAt = new Map(); // username.toLowerCase() → timestamp
+let pendingChatMessages = [];   // messages queued while IRC socket is connecting
 let approvedCnt   = 0;
 
 // Handle implicit grant callback (token in URL hash) before anything else
@@ -490,7 +491,13 @@ function initTMI() {
         ws.send(`JOIN #${BROADCASTER}`);
         if (canAuth) {
             log(`Twitch connected. Listening on #${BROADCASTER} (bot replies enabled).`);
+            // Flush any messages that were queued while the socket was connecting
+            pendingChatMessages.splice(0).forEach(text => {
+                ws.send(`PRIVMSG #${BROADCASTER} :${text}`);
+                log(`→ Chat sent (queued): ${text}`);
+            });
         } else {
+            pendingChatMessages = []; // discard — can't send as anonymous
             log(`Twitch connected. Listening on #${BROADCASTER} (read-only mode).`);
         }
     };
@@ -512,9 +519,14 @@ function initTMI() {
 
 function sendChatMessage(text) {
     if (!twitchToken || !twitchLogin) { log('Chat reply skipped: Twitch not connected.'); return; }
-    if (!tmiClient || tmiClient.readyState !== WebSocket.OPEN) { log('Chat reply skipped: IRC socket not open.'); return; }
     const safe = String(text || '').replace(/[\r\n]+/g, ' ').trim();
     if (!safe) return;
+    if (!tmiClient || tmiClient.readyState !== WebSocket.OPEN) {
+        // Socket is still connecting — queue the message to send on open
+        pendingChatMessages.push(safe);
+        log(`→ Chat queued (socket connecting): ${safe}`);
+        return;
+    }
     tmiClient.send(`PRIVMSG #${BROADCASTER} :${safe}`);
     log(`→ Chat sent: ${safe}`);
 }
