@@ -189,6 +189,9 @@ db.ref('activeClue').on('value', snap => {
         overlay.classList.add('active');
         if (clue.tileId !== pvActiveTileId) {
             pvActiveTileId = clue.tileId;
+            // Read timer config directly from the clue — avoids race with settings listener
+            pvTimerEnabled = !!clue.timerEnabled;
+            pvTimerSeconds = Math.min(30, Math.max(5, clue.timerSeconds || 20));
             requestAnimationFrame(startPreviewTimer);
         }
     } else {

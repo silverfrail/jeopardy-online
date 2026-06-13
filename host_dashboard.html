@@ -858,7 +858,8 @@ function renderBoard() {
                     db.ref(`boardState/tiles/${origIdx}/played`).set(true);
                     db.ref('activeClue').set({
                         status: 'active', tileId: tile.id,
-                        value: tile.value, category: tile.category, question: tile.question
+                        value: tile.value, category: tile.category, question: tile.question,
+                        timerEnabled, timerSeconds
                     });
                 };
             }
