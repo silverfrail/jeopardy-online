@@ -104,6 +104,11 @@
         /* ── Log ── */
         #syslog { font-size: 0.72rem; color: var(--yellow); font-style: italic; text-align: right; min-height: 1em; padding: 2px 0; flex-shrink: 0; }
 
+        /* ── Tooltip ── */
+        .tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: #383858; color: var(--dim); font-size: 0.65rem; font-weight: 700; cursor: default; margin-left: 5px; flex-shrink: 0; }
+        .tip::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #222240; color: #fff; font-size: 0.75rem; font-weight: 400; padding: 7px 10px; border-radius: 5px; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--border); z-index: 999; }
+        .tip:hover::after { opacity: 1; }
+
         /* ── Modal ── */
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10000; align-items: center; justify-content: center; }
         .modal.open { display: flex; }
@@ -211,19 +216,26 @@
             <!-- Twitch -->
             <div class="panel">
                 <div class="ptitle">Twitch</div>
-                <div id="tw-connect">
-                    <button onclick="startTwitchAuth()" style="width:100%">Connect Twitch Account</button>
-                    <div style="font-size:0.75rem;color:var(--dim);margin-top:8px;">Required for follower verification.</div>
+
+                <!-- Followers only toggle — always visible -->
+                <div class="toggle-row" style="margin-bottom:10px;">
+                    <input type="checkbox" id="followers-only" checked onchange="updateFollowersOnly()">
+                    <label for="followers-only" style="color:var(--dim)">Followers only</label>
+                    <span class="tip" data-tip="When checked, only viewers who follow your Twitch channel can submit guesses. Requires connecting your Twitch account below.">?</span>
                 </div>
-                <div id="tw-connected" style="display:none">
-                    <div style="font-size:0.82rem;color:var(--green);margin-bottom:6px;">● Connected as <strong id="tw-user"></strong></div>
-                    <div style="font-size:0.78rem;color:var(--dim);">Channel: <strong id="tw-chan"></strong></div>
-                    <div style="font-size:0.78rem;color:var(--dim);margin-top:3px;">Approved this session: <strong id="appr-count">0</strong></div>
-                    <div class="toggle-row" style="margin-top:10px;">
-                        <input type="checkbox" id="followers-only" checked>
-                        <label for="followers-only" style="color:var(--dim)">Followers only</label>
+
+                <!-- Auth section — hidden when followers-only is off -->
+                <div id="tw-auth-section">
+                    <div id="tw-connect">
+                        <button onclick="startTwitchAuth()" style="width:100%">Connect Twitch Account</button>
+                        <div style="font-size:0.75rem;color:var(--dim);margin-top:8px;">Required for follower verification.</div>
                     </div>
-                    <button class="btn-sec btn-sm" style="margin-top:8px" onclick="disconnectTwitch()">Disconnect</button>
+                    <div id="tw-connected" style="display:none">
+                        <div style="font-size:0.82rem;color:var(--green);margin-bottom:6px;">● Connected as <strong id="tw-user"></strong></div>
+                        <div style="font-size:0.78rem;color:var(--dim);">Channel: <strong id="tw-chan"></strong></div>
+                        <div style="font-size:0.78rem;color:var(--dim);margin-top:3px;">Approved this session: <strong id="appr-count">0</strong></div>
+                        <button class="btn-sec btn-sm" style="margin-top:8px" onclick="disconnectTwitch()">Disconnect</button>
+                    </div>
                 </div>
             </div>
 
@@ -376,6 +388,12 @@ async function setupTwitch(loginName) {
 function clearTwitchSession() {
     ['twitch_token', 'broadcaster_id'].forEach(k => localStorage.removeItem(k));
     twitchToken = null; broadcasterId = null;
+}
+
+function updateFollowersOnly() {
+    const checked = document.getElementById('followers-only').checked;
+    document.getElementById('tw-auth-section').style.display = checked ? '' : 'none';
+    if (!checked && twitchToken) disconnectTwitch();
 }
 
 function disconnectTwitch() {
