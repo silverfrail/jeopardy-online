@@ -521,7 +521,7 @@ function initTMI() {
         });
     };
     ws.onerror = () => log('Chat connection error.');
-    ws.onclose = () => { tmiClient = null; };
+    ws.onclose = () => { if (tmiClient === ws) tmiClient = null; };
     tmiClient = ws;
 }
 
