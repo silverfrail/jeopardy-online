@@ -39,6 +39,14 @@
         .ov-val { color: var(--green); font-size: 3rem; font-weight: 900; margin-bottom: 36px; }
         .ov-txt { color: var(--yellow); font-size: 3.4rem; font-weight: 700; line-height: 1.4; max-width: 88%; }
 
+        /* ── Overlay Timer ── */
+        #ov-timer { position: absolute; bottom: 36px; left: 80px; right: 80px; display: none; }
+        .ov-timer-bar-wrap { height: 10px; background: rgba(255,255,255,0.12); border-radius: 5px; overflow: hidden; margin-bottom: 14px; }
+        .ov-timer-bar { height: 100%; border-radius: 5px; background: var(--green); transition: width 0.9s linear, background 0.3s; }
+        .ov-timer-num { text-align: center; font-size: 3rem; font-weight: 900; color: var(--green); line-height: 1; opacity: 0.88; }
+        .ov-timer-num.warn   { color: var(--yellow); }
+        .ov-timer-num.urgent { color: #ff4444; }
+
         /* ── Leaderboard ── */
         #leaderboard { display: grid; gap: 12px; height: 130px; }
         .player-card { background: var(--panel); border: 2px solid var(--blue); border-radius: 8px; display: flex; align-items: center; padding: 0 36px; gap: 20px; }
@@ -76,6 +84,10 @@
             <div class="ov-cat" id="ov-cat"></div>
             <div class="ov-val" id="ov-val"></div>
             <div class="ov-txt" id="ov-txt"></div>
+            <div id="ov-timer">
+                <div class="ov-timer-bar-wrap"><div class="ov-timer-bar" id="ov-timer-bar"></div></div>
+                <div class="ov-timer-num" id="ov-timer-num">20</div>
+            </div>
         </div>
     </div>
     <div id="leaderboard"></div>
@@ -87,8 +99,23 @@ const db = firebase.initializeApp({
     databaseURL: 'https://jeopardy-stream-default-rtdb.firebaseio.com'
 }).database();
 
-let lastScores    = {};
-let initialRefresh = true;
+let lastScores       = {};
+let initialRefresh   = true;
+
+// ── TIMER STATE ────────────────────────────────────────────────────────────────
+let pvTimerEnabled   = false;
+let pvTimerSeconds   = 20;
+let pvTimerHandle    = null;
+let pvTimerRemaining = 0;
+let pvActiveTileId   = null;
+
+// ── SETTINGS LISTENER (reads timer config pushed by host dashboard) ─────────
+db.ref('settings').on('value', snap => {
+    const s = snap.val();
+    if (!s) return;
+    pvTimerEnabled = !!s.timerEnabled;
+    pvTimerSeconds = Math.min(30, Math.max(5, s.timerSeconds || 20));
+});
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 function toggleSettings() {
@@ -160,10 +187,50 @@ db.ref('activeClue').on('value', snap => {
         document.getElementById('ov-val').innerText = `$${clue.value}`;
         document.getElementById('ov-txt').innerText = clue.question;
         overlay.classList.add('active');
+        if (clue.tileId !== pvActiveTileId) {
+            pvActiveTileId = clue.tileId;
+            requestAnimationFrame(startPreviewTimer);
+        }
     } else {
         overlay.classList.remove('active');
+        pvActiveTileId = null;
+        clearPreviewTimer();
     }
 });
+
+// ── PREVIEW TIMER FUNCTIONS ────────────────────────────────────────────────────────
+function startPreviewTimer() {
+    if (!pvTimerEnabled) return;
+    clearPreviewTimer();
+    pvTimerRemaining = pvTimerSeconds;
+    document.getElementById('ov-timer').style.display = '';
+    updatePreviewTimerDisplay();
+    pvTimerHandle = setInterval(() => {
+        pvTimerRemaining--;
+        updatePreviewTimerDisplay();
+        if (pvTimerRemaining <= 0) clearPreviewTimer();
+    }, 1000);
+}
+
+function clearPreviewTimer() {
+    if (pvTimerHandle) { clearInterval(pvTimerHandle); pvTimerHandle = null; }
+    const el = document.getElementById('ov-timer');
+    if (el) el.style.display = 'none';
+}
+
+function updatePreviewTimerDisplay() {
+    const num = document.getElementById('ov-timer-num');
+    const bar = document.getElementById('ov-timer-bar');
+    const pct = pvTimerRemaining / pvTimerSeconds;
+    if (num) {
+        num.textContent = pvTimerRemaining;
+        num.className = 'ov-timer-num' + (pct <= 0.25 ? ' urgent' : pct <= 0.5 ? ' warn' : '');
+    }
+    if (bar) {
+        bar.style.width      = (pct * 100) + '%';
+        bar.style.background = pct > 0.5 ? 'var(--green)' : pct > 0.25 ? 'var(--yellow)' : '#ff4444';
+    }
+}
 
 // ── LEADERBOARD LISTENER ──────────────────────────────────────────────────────
 db.ref('leaderboard').on('value', snap => {

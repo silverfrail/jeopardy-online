@@ -375,6 +375,8 @@ function initDashboard() {
     document.getElementById('auth-overlay').style.display = 'none';
     document.getElementById('ui').style.display = 'flex';
     document.getElementById('fb-dot').classList.add('on');
+    // Push current settings to Firebase so the preview overlay stays in sync
+    db.ref('settings').set({ timerEnabled, timerSeconds });
     log('Dashboard initialized.');
     initListeners();
     initTMI();  // always listen to chat, regardless of OAuth state
@@ -1025,6 +1027,8 @@ function confirmReset() {
     timerSeconds = Math.min(30, Math.max(5, parseInt(document.getElementById('cfg-timer-secs').value, 10) || 20));
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
+    // Push updated settings to Firebase so the preview overlay picks them up
+    db.ref('settings').set({ timerEnabled, timerSeconds });
     // Reset game state
     db.ref('boardState/tiles').once('value', snap => {
         const tiles = snap.val();
