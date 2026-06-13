@@ -477,6 +477,7 @@ function parseTwitchIRC(raw) {
 function initTMI() {
     if (tmiClient) { tmiClient.close(); tmiClient = null; }
     const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+    let joinedChannel = false;
     ws.onopen = () => {
         const canAuth = Boolean(twitchToken && twitchLogin);
         ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
@@ -489,16 +490,8 @@ function initTMI() {
             ws.send(`NICK justinfan${Math.floor(Math.random() * 899999 + 100000)}`);
         }
         ws.send(`JOIN #${BROADCASTER}`);
-        if (canAuth) {
-            log(`Twitch connected. Listening on #${BROADCASTER} (bot replies enabled).`);
-            // Flush any messages that were queued while the socket was connecting
-            pendingChatMessages.splice(0).forEach(text => {
-                ws.send(`PRIVMSG #${BROADCASTER} :${text}`);
-                log(`→ Chat sent (queued): ${text}`);
-            });
-        } else {
+        if (!canAuth) {
             pendingChatMessages = []; // discard — can't send as anonymous
-            log(`Twitch connected. Listening on #${BROADCASTER} (read-only mode).`);
         }
     };
     ws.onmessage = e => {
@@ -507,6 +500,21 @@ function initTMI() {
             if (line.includes(' NOTICE ')) {
                 const noticeMatch = line.match(/NOTICE [^ ]+ :(.+)$/);
                 if (noticeMatch) log(`Twitch IRC notice: ${noticeMatch[1]}`);
+            }
+            // Wait for Twitch to confirm the JOIN before sending anything
+            if (!joinedChannel && line.includes(`JOIN #${BROADCASTER}`)) {
+                joinedChannel = true;
+                const canAuth = Boolean(twitchToken && twitchLogin);
+                if (canAuth) {
+                    log(`Twitch connected. Listening on #${BROADCASTER} (bot replies enabled).`);
+                    // Now it's safe to flush queued messages
+                    pendingChatMessages.splice(0).forEach(text => {
+                        ws.send(`PRIVMSG #${BROADCASTER} :${text}`);
+                        log(`→ Chat sent (queued): ${text}`);
+                    });
+                } else {
+                    log(`Twitch connected. Listening on #${BROADCASTER} (read-only mode).`);
+                }
             }
             const parsed = parseTwitchIRC(line);
             if (parsed) onChat(parsed.channel, parsed.tags, parsed.message);
