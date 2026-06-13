@@ -296,6 +296,7 @@ let activeClue    = null;
 let pendingGuess  = null;       // { username, text }
 let wrongGuessers = new Set();  // usernames who guessed wrong on current clue
 let followerCache = new Map();  // username.toLowerCase() → boolean
+let userIdCache   = new Map();  // login → userId
 let lastBotReplyAt = new Map(); // username.toLowerCase() → timestamp
 let approvedCnt   = 0;
 
@@ -424,6 +425,7 @@ async function setupTwitch(loginName) {
 function clearTwitchSession() {
     ['twitch_token', 'broadcaster_id'].forEach(k => localStorage.removeItem(k));
     twitchToken = null; broadcasterId = null; twitchLogin = null;
+    userIdCache.clear();
     lastBotReplyAt.clear();
 }
 
@@ -521,12 +523,13 @@ async function onChat(channel, tags, message) {
     if (pendingGuess) return;
 
     const username = tags['display-name'] || tags['username'];
+    const login = (tags['username'] || username || '').toLowerCase();
     if (wrongGuessers.has(username.toLowerCase())) return;
 
     const followersOnly = document.getElementById('followers-only')?.checked ?? true;
     if (followersOnly && twitchToken) {
         // Only enforce follower check when actually connected to Twitch
-        const allowed = await isFollower(tags['user-id'], username);
+        const allowed = await isFollower(tags['user-id'], login || username.toLowerCase());
         if (!allowed) {
             log(`${username} guessed — not a follower, ignored.`);
             const key = username.toLowerCase();
@@ -546,13 +549,34 @@ async function onChat(channel, tags, message) {
 }
 
 // ── FOLLOWER CHECK ────────────────────────────────────────────────────────────
-async function isFollower(userId, username) {
-    const key = username.toLowerCase();
+async function resolveUserIdByLogin(login) {
+    if (!login) return null;
+    if (userIdCache.has(login)) return userIdCache.get(login);
+    const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`,
+        { headers: { 'Authorization': `Bearer ${twitchToken}`, 'Client-Id': CLIENT_ID } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const id = data.data?.[0]?.id || null;
+    if (id) userIdCache.set(login, id);
+    return id;
+}
+
+async function isFollower(userId, login) {
+    const key = login.toLowerCase();
     if (followerCache.has(key)) return followerCache.get(key);
     if (!broadcasterId || !twitchToken) return false;
     try {
+        let effectiveUserId = userId;
+        if (!effectiveUserId) {
+            effectiveUserId = await resolveUserIdByLogin(login);
+        }
+        if (!effectiveUserId) {
+            followerCache.set(key, false);
+            return false;
+        }
+
         let res = await fetch(
-            `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${userId}`,
+            `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${effectiveUserId}`,
             { headers: { 'Authorization': `Bearer ${twitchToken}`, 'Client-Id': CLIENT_ID } }
         );
         if (res.status === 401) { clearTwitchSession(); return false; }
