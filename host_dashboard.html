@@ -348,6 +348,7 @@ let timerEnabled    = localStorage.getItem('cfg_timer_on')   === '1';
 let timerSeconds    = Math.min(30, Math.max(5, parseInt(localStorage.getItem('cfg_timer_secs') || '20', 10)));
 let timerHandle     = null;
 let timerRemaining  = 0;
+let timerExpired    = false;   // true after timer hits zero — blocks new guesses
 let lastActiveTileId = null;
 
 // Handle implicit grant callback (token in URL hash) before anything else
@@ -622,11 +623,16 @@ async function onChat(channel, tags, message) {
     }
 
     if (pendingGuess) {
+        // Block new entries once the timer has expired
+        if (timerExpired) return;
         guessQueue.push({ username, text: guessText });
         log(`Guess queued: ${username} → "${guessText}" (${guessQueue.length} in queue)`);
         updateQueueIndicator();
         return;
     }
+
+    // Also block becoming the active guess if the timer already expired
+    if (timerExpired) return;
 
     pendingGuess = { username, text: guessText };
     showPending(pendingGuess);
@@ -736,6 +742,7 @@ function updateQueueIndicator() {
 function startClueTimer() {
     if (!timerEnabled) return;
     clearClueTimer();
+    timerExpired   = false;
     timerRemaining = timerSeconds;
     document.getElementById('ac-timer').style.display = '';
     updateTimerDisplay();
@@ -743,9 +750,16 @@ function startClueTimer() {
         timerRemaining--;
         updateTimerDisplay();
         if (timerRemaining <= 0) {
-            clearClueTimer();
-            log('⏱ Time expired — clue dismissed.');
-            dismissClue(false);
+            clearInterval(timerHandle); timerHandle = null;
+            timerExpired = true;
+            // If there's still a pending guess or queued guesses, hold the clue open
+            // so the host can judge answers that arrived before time ran out.
+            if (pendingGuess || guessQueue.length > 0) {
+                log('⏱ Time expired — judging remaining answers before dismiss.');
+            } else {
+                log('⏱ Time expired — clue dismissed.');
+                dismissClue(false);
+            }
         }
     }, 1000);
 }
@@ -784,11 +798,17 @@ function judgeGuess(correct) {
         pendingGuess = null;
         showNextGuess();
         updateQueueIndicator();
+        // If the timer already expired and the queue is now empty, auto-dismiss
+        if (timerExpired && !pendingGuess && guessQueue.length === 0) {
+            log('⏱ All queued answers judged — clue dismissed.');
+            dismissClue(false);
+        }
     }
 }
 
 function dismissClue(resolved) {
     clearClueTimer();
+    timerExpired  = false;
     db.ref('activeClue').set({ status: 'inactive', tileId: null });
     pendingGuess  = null;
     wrongGuessers = new Set();
