@@ -206,7 +206,7 @@ function startPreviewTimer() {
     if (!pvTimerEnabled) return;
     clearPreviewTimer();
     pvTimerRemaining = pvTimerSeconds;
-    document.getElementById('ov-timer').style.display = '';
+    document.getElementById('ov-timer').style.display = 'block';
     updatePreviewTimerDisplay();
     pvTimerHandle = setInterval(() => {
         pvTimerRemaining--;
