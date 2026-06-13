@@ -306,22 +306,30 @@ function randomStr(len) {
 }
 
 // ── FIREBASE AUTH ─────────────────────────────────────────────────────────────
+function initDashboard() {
+    document.getElementById('auth-overlay').style.display = 'none';
+    document.getElementById('ui').style.display = 'flex';
+    document.getElementById('fb-dot').classList.add('on');
+    log('Dashboard initialized.');
+    initListeners();
+    oauthReady.then(() => checkTwitchSession());
+}
+
 function unlock() {
     const key = document.getElementById('pass-in').value;
     db.ref('authValidation/secretKey').once('value').then(snap => {
         if (snap.val() === key) {
-            document.getElementById('auth-overlay').style.display = 'none';
-            document.getElementById('ui').style.display = 'flex';
-            document.getElementById('fb-dot').classList.add('on');
-            log('Dashboard initialized.');
-            initListeners();
-            oauthReady.then(() => checkTwitchSession());
+            sessionStorage.setItem('dashboard_unlocked', '1');
+            initDashboard();
         } else {
             document.getElementById('auth-err').innerText = 'Incorrect password.';
         }
     });
 }
 document.getElementById('pass-in').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+
+// Auto-unlock when returning from OAuth redirect (password already verified this session)
+if (sessionStorage.getItem('dashboard_unlocked')) { initDashboard(); }
 
 // ── TWITCH OAUTH (Implicit Grant) ────────────────────────────────────────────
 function startTwitchAuth() {
@@ -399,6 +407,9 @@ function updateFollowersOnly() {
 function disconnectTwitch() {
     if (tmiClient) { tmiClient.disconnect(); tmiClient = null; }
     clearTwitchSession();
+    const cb = document.getElementById('followers-only');
+    if (cb) cb.checked = false;
+    document.getElementById('tw-auth-section').style.display = 'none';
     document.getElementById('tw-connect').style.display   = '';
     document.getElementById('tw-connected').style.display = 'none';
     document.getElementById('tw-dot').classList.remove('on');
