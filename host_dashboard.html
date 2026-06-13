@@ -333,13 +333,16 @@ async function handleOAuthCallback() {
         return;
     }
 
+    const verifier = localStorage.getItem('pkce_verifier');
+    console.log('[PKCE Verifier present?]', !!verifier, '| Length:', verifier?.length ?? 0);
+
     const res = await fetch('https://id.twitch.tv/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
             client_id: CLIENT_ID, grant_type: 'authorization_code',
             code, redirect_uri: REDIRECT_URI,
-            code_verifier: localStorage.getItem('pkce_verifier')
+            code_verifier: verifier
         })
     });
     const data = await res.json();
