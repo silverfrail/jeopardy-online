@@ -106,7 +106,7 @@
 
         /* ── Tooltip ── */
         .tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: #383858; color: var(--dim); font-size: 0.65rem; font-weight: 700; cursor: default; margin-left: 5px; flex-shrink: 0; }
-        .tip::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); left: 0; background: #222240; color: #fff; font-size: 0.75rem; font-weight: 400; padding: 7px 10px; border-radius: 5px; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--border); z-index: 999; }
+        .tip::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; background: #222240; color: #fff; font-size: 0.75rem; font-weight: 400; padding: 7px 10px; border-radius: 5px; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--border); z-index: 999; }
         .tip:hover::after { opacity: 1; }
 
         /* ── Modal ── */
