@@ -467,7 +467,8 @@ async function onChat(channel, tags, message) {
     if (wrongGuessers.has(username.toLowerCase())) return;
 
     const followersOnly = document.getElementById('followers-only')?.checked ?? true;
-    if (followersOnly) {
+    if (followersOnly && twitchToken) {
+        // Only enforce follower check when actually connected to Twitch
         const allowed = await isFollower(tags['user-id'], username);
         if (!allowed) { log(`${username} guessed — not a follower, ignored.`); return; }
     }
