@@ -6,7 +6,7 @@
     <title>Jeopardy Host Dashboard</title>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
+
     <style>
         :root {
             --green:  #5CFF5C;
@@ -390,7 +390,7 @@ async function setupTwitch(loginName) {
     document.getElementById('tw-chan').innerText = BROADCASTER;
     document.getElementById('tw-dot').classList.add('on');
     initTMI();
-    log(`Twitch connected. Listening on #${BROADCASTER}`);
+    log(`Twitch session active. Connecting to chat…`);
 }
 
 function clearTwitchSession() {
@@ -405,7 +405,7 @@ function updateFollowersOnly() {
 }
 
 function disconnectTwitch() {
-    if (tmiClient) { tmiClient.disconnect(); tmiClient = null; }
+    if (tmiClient) { tmiClient.close(); tmiClient = null; }
     clearTwitchSession();
     const cb = document.getElementById('followers-only');
     if (cb) cb.checked = false;
@@ -416,12 +416,41 @@ function disconnectTwitch() {
     log('Twitch disconnected.');
 }
 
-// ── TMI / CHAT ────────────────────────────────────────────────────────────────
+// ── TWITCH IRC (native WebSocket — no CDN dependency) ───────────────────────
+function parseTwitchIRC(raw) {
+    let tagsStr = '', rest = raw;
+    if (raw.startsWith('@')) {
+        const sp = raw.indexOf(' ');
+        tagsStr = raw.slice(1, sp);
+        rest    = raw.slice(sp + 1);
+    }
+    const tags = {};
+    tagsStr.split(';').forEach(t => { const eq = t.indexOf('='); if (eq > -1) tags[t.slice(0, eq)] = t.slice(eq + 1); });
+    const m = rest.match(/^:\S+!\S+@\S+ PRIVMSG (#\S+) :(.+)$/);
+    if (!m) return null;
+    return { channel: m[1], message: m[2], tags: { 'display-name': tags['display-name'] || '', 'user-id': tags['user-id'] || '' } };
+}
+
 function initTMI() {
-    if (tmiClient) tmiClient.disconnect();
-    tmiClient = new tmi.Client({ channels: [BROADCASTER] });
-    tmiClient.connect();
-    tmiClient.on('message', onChat);
+    if (tmiClient) { tmiClient.close(); tmiClient = null; }
+    const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+    ws.onopen = () => {
+        ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+        ws.send('PASS SCHMOOPIIE');
+        ws.send(`NICK justinfan${Math.floor(Math.random() * 899999 + 100000)}`);
+        ws.send(`JOIN #${BROADCASTER}`);
+        log(`Twitch connected. Listening on #${BROADCASTER}`);
+    };
+    ws.onmessage = e => {
+        e.data.split('\r\n').filter(Boolean).forEach(line => {
+            if (line.startsWith('PING')) { ws.send('PONG :tmi.twitch.tv'); return; }
+            const parsed = parseTwitchIRC(line);
+            if (parsed) onChat(parsed.channel, parsed.tags, parsed.message);
+        });
+    };
+    ws.onerror = () => log('Chat connection error.');
+    ws.onclose = () => { tmiClient = null; };
+    tmiClient = ws;
 }
 
 async function onChat(channel, tags, message) {
