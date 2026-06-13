@@ -360,6 +360,7 @@ let userIdCache   = new Map();  // login → userId
 let lastBotReplyAt = new Map(); // username.toLowerCase() → timestamp
 let pendingChatMessages = [];   // messages queued while IRC socket is connecting
 let approvedCnt   = 0;
+let tmiRetryDelay = 2000;       // exponential backoff delay for IRC reconnects (ms)
 
 // ── SETTINGS (persisted across sessions) ─────────────────────────────────────
 let timerEnabled    = localStorage.getItem('cfg_timer_on')   === '1';
@@ -547,6 +548,7 @@ function initTMI() {
     const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
     let joinedChannel = false;
     ws.onopen = () => {
+        tmiRetryDelay = 2000; // reset backoff on successful open
         const canAuth = Boolean(twitchToken && twitchLogin);
         ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
         if (canAuth) {
@@ -572,6 +574,7 @@ function initTMI() {
             // Wait for Twitch to confirm the JOIN before sending anything
             if (!joinedChannel && line.includes(`JOIN #${BROADCASTER}`)) {
                 joinedChannel = true;
+                tmiRetryDelay = 2000; // reset backoff on confirmed JOIN
                 const canAuth = Boolean(twitchToken && twitchLogin);
                 if (canAuth) {
                     log(`Twitch connected. Listening on #${BROADCASTER} (bot replies enabled).`);
@@ -588,8 +591,20 @@ function initTMI() {
             if (parsed) onChat(parsed.channel, parsed.tags, parsed.message);
         });
     };
-    ws.onerror = () => log('Chat connection error.');
-    ws.onclose = () => { if (tmiClient === ws) tmiClient = null; };
+    ws.onerror = () => {
+        log(`Chat connection error — retrying in ${tmiRetryDelay / 1000}s…`);
+    };
+    ws.onclose = () => {
+        if (tmiClient !== ws) return; // socket was intentionally replaced — don't retry
+        tmiClient = null;
+        const delay = tmiRetryDelay;
+        tmiRetryDelay = Math.min(tmiRetryDelay * 2, 30000); // double, cap at 30s
+        setTimeout(() => {
+            if (tmiClient) return; // another initTMI() already fired
+            log(`Reconnecting to Twitch chat…`);
+            initTMI();
+        }, delay);
+    };
     tmiClient = ws;
 }
 
