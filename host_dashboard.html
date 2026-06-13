@@ -245,7 +245,7 @@
                         <div class="ac-cat" id="ac-cat"></div>
                         <div class="ac-val" id="ac-val"></div>
                     </div>
-                    <button class="btn-sec btn-sm" onclick="dismissClue()">Dismiss Clue</button>
+                    <button class="btn-sec btn-sm" onclick="dismissClue('manual')">Dismiss Clue</button>
                 </div>
                 <div class="ac-q"   id="ac-q"></div>
                 <div class="ac-albl">Correct Answer</div>
@@ -791,7 +791,7 @@ function startClueTimer() {
                 log('⏱ Time expired — judging remaining answers before dismiss.');
             } else {
                 log('⏱ Time expired — clue dismissed.');
-                dismissClue(false);
+                dismissClue('timer');
             }
         }
     }, 1000);
@@ -824,7 +824,7 @@ function judgeGuess(correct) {
     if (correct) {
         adjustScore(pendingGuess.username, activeClue.value);
         log(`✓ ${pendingGuess.username} correct on ${clueContext}! +$${activeClue.value}`);
-        dismissClue(true); // pass true to indicate it was resolved by correct answer
+        dismissClue('correct');
     } else {
         wrongGuessers.add(pendingGuess.username.toLowerCase());
         log(`✗ ${pendingGuess.username} wrong on ${clueContext}. Clue still open.`);
@@ -834,12 +834,12 @@ function judgeGuess(correct) {
         // If the timer already expired and the queue is now empty, auto-dismiss
         if (timerExpired && !pendingGuess && guessQueue.length === 0) {
             log('⏱ All queued answers judged — clue dismissed.');
-            dismissClue(false);
+            dismissClue('timer-queue');
         }
     }
 }
 
-function dismissClue(resolved) {
+function dismissClue(reason) {
     clearClueTimer();
     timerExpired  = false;
     db.ref('activeClue').set({ status: 'inactive', tileId: null });
@@ -848,9 +848,7 @@ function dismissClue(resolved) {
     guessQueue    = [];
     document.getElementById('pg-panel').style.display = 'none';
     updateQueueIndicator();
-    if (!resolved) {
-        log('Clue dismissed.');
-    }
+    if (reason === 'manual') log('Clue manually dismissed.');
 }
 
 // ── SCORE ─────────────────────────────────────────────────────────────────────
