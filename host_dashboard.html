@@ -302,8 +302,8 @@ const oauthReady = handleOAuthCallback();
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 function log(msg) {
-    // Send to Firebase so it syncs across multiple hosts/sessions in real-time
-    db.ref('activityLog').push({
+    // Send to Firebase under a sub-node of boardState to satisfy strict rules (e.g. boardState/activityLog)
+    db.ref('boardState/activityLog').push({
         time: new Date().toLocaleTimeString(),
         text: msg
     });
@@ -688,8 +688,8 @@ function initListeners() {
         });
     });
 
-    // Sync and render the activity log from Firebase
-    db.ref('activityLog').on('value', snap => {
+    // Sync and render the activity log from Firebase under boardState/activityLog
+    db.ref('boardState/activityLog').on('value', snap => {
         const wrap = document.getElementById('syslog');
         if (!wrap) return;
         wrap.innerHTML = ''; // Clear prior content
@@ -791,7 +791,7 @@ function resetGame() {
     });
     db.ref('leaderboard').set({});
     db.ref('activeClue').set({ status: 'inactive', tileId: null });
-    db.ref('activityLog').set(null); // Clear the log on reset
+    db.ref('boardState/activityLog').set(null); // Clear the log on reset
     pendingGuess  = null;
     wrongGuessers = new Set();
     log('Game reset.');
