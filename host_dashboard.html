@@ -130,6 +130,17 @@
         .mbox input { width: 100%; margin-bottom: 10px; }
         .mrow { display: flex; gap: 8px; margin-top: 14px; }
         .mrow > button { flex: 1; }
+
+        /* ── Settings Modal ── */
+        .cfg-warning { background: rgba(255,68,68,0.08); border: 1px solid rgba(255,68,68,0.25); border-radius: 6px; padding: 9px 12px; font-size: 0.8rem; color: rgba(255,180,180,0.85); margin-bottom: 16px; }
+        .cfg-section { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 12px; }
+        .cfg-section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 12px; }
+        .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .cfg-row-main { display: flex; align-items: center; gap: 10px; flex: 1; }
+        .cfg-row-main label { font-size: 0.88rem; cursor: pointer; color: var(--text); }
+        .cfg-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+        .cfg-sub-row > label { font-size: 0.82rem; color: var(--dim); }
+        .cfg-sub-row input[type=number] { width: 64px !important; margin-bottom: 0 !important; text-align: center; }
     </style>
 </head>
 <body>
@@ -174,17 +185,24 @@
 <div class="modal" id="reset-modal">
     <div class="mbox">
         <h3>⚙️ Game Settings</h3>
-        <div style="font-size:0.8rem;color:var(--dim);margin-bottom:16px;">Applying will reset the board, scores, and activity log.</div>
+        <div class="cfg-warning">⚠️ Applying will reset the board, scores, and activity log.</div>
 
-        <div class="ptitle" style="margin-bottom:10px;">Countdown Timer</div>
-        <div class="toggle-row" style="margin-bottom:10px;">
-            <input type="checkbox" id="cfg-timer-on" onchange="document.getElementById('cfg-timer-opts').style.display=this.checked?'':'none'">
-            <label for="cfg-timer-on">Enable countdown timer per clue</label>
-            <span class="tip" data-tip="When enabled, a timer starts each time a clue is opened. The clue auto-dismisses when it reaches zero. You can still dismiss manually at any time.">?</span>
-        </div>
-        <div id="cfg-timer-opts" style="display:none;margin-left:24px;margin-bottom:8px;">
-            <label style="font-size:0.82rem;color:var(--dim);display:block;margin-bottom:5px;">Seconds per clue <span style="color:var(--dim);">(5 – 30)</span></label>
-            <input type="number" id="cfg-timer-secs" min="5" max="30" value="20" style="width:72px;">
+        <div class="cfg-section">
+            <div class="cfg-section-title">Countdown Timer</div>
+            <div class="cfg-row">
+                <div class="cfg-row-main">
+                    <input type="checkbox" id="cfg-timer-on" onchange="document.getElementById('cfg-timer-opts').style.display=this.checked?'flex':'none'">
+                    <label for="cfg-timer-on">Enable countdown timer per clue</label>
+                </div>
+                <span class="tip" data-tip="When enabled, a timer starts each time a clue is opened. The clue auto-dismisses when it reaches zero. You can still dismiss manually at any time.">?</span>
+            </div>
+            <div id="cfg-timer-opts" class="cfg-sub-row" style="display:none;">
+                <label for="cfg-timer-secs">Seconds per clue</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="number" id="cfg-timer-secs" min="5" max="30" value="20">
+                    <span style="font-size:0.78rem;color:var(--dim);">5 – 30</span>
+                </div>
+            </div>
         </div>
 
         <div class="mrow">
