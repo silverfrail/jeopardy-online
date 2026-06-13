@@ -507,8 +507,7 @@ function initTMI() {
 }
 
 function sendChatMessage(text) {
-    const followersOnly = document.getElementById('followers-only')?.checked ?? true;
-    if (!followersOnly || !twitchToken || !twitchLogin) return;
+    if (!twitchToken || !twitchLogin) return;
     if (!tmiClient || tmiClient.readyState !== WebSocket.OPEN) return;
     const safe = String(text || '').replace(/[\r\n]+/g, ' ').trim();
     if (!safe) return;
