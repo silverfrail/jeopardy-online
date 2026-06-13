@@ -140,6 +140,18 @@
     </div>
 </div>
 
+<div class="modal" id="export-modal">
+    <div class="mbox">
+        <h3>Export Game Board</h3>
+        <input type="text" id="export-name" placeholder="File name...">
+        <div style="font-size:0.78rem;color:var(--dim);margin-top:-4px;margin-bottom:4px;">This file will be saved to your Downloads folder.</div>
+        <div class="mrow">
+            <button class="btn-sec" onclick="closeModal('export-modal')">Cancel</button>
+            <button class="btn-ok"  onclick="doExport()">Save</button>
+        </div>
+    </div>
+</div>
+
 <input type="file" id="file-in" style="display:none" accept=".json" onchange="importFile(this.files)">
 
 <!-- ── Main UI ── -->
@@ -644,12 +656,19 @@ function exportFile() {
     const raw  = document.getElementById('json-in').value;
     let   name = 'jeopardy_board';
     try { const p = JSON.parse(raw); name = p.metadata?.title || name; } catch {}
-    const fn = prompt('File name:', name);
+    document.getElementById('export-name').value = name;
+    openModal('export-modal');
+}
+
+function doExport() {
+    const fn  = document.getElementById('export-name').value.trim();
     if (!fn) return;
-    const a    = document.createElement('a');
+    const raw = document.getElementById('json-in').value;
+    const a   = document.createElement('a');
     a.href     = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
     a.download = fn.replace(/[^a-z0-9_\-]/gi, '_') + '.json';
     a.click();
+    closeModal('export-modal');
     log('Board exported.');
 }
 
