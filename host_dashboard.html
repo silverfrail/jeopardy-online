@@ -574,18 +574,13 @@ async function resolveUserIdByLogin(login) {
 }
 
 async function isFollower(userId, login) {
-    const key = login.toLowerCase();
-    if (followerCache.has(key)) return followerCache.get(key);
     if (!broadcasterId || !twitchToken) return false;
     try {
         let effectiveUserId = /^\d+$/.test(String(userId || '')) ? String(userId) : null;
         if (!effectiveUserId) {
             effectiveUserId = await resolveUserIdByLogin(login);
         }
-        if (!effectiveUserId) {
-            followerCache.set(key, false);
-            return false;
-        }
+        if (!effectiveUserId) return false;
 
         let res = await fetch(
             `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${effectiveUserId}`,
@@ -593,13 +588,7 @@ async function isFollower(userId, login) {
         );
         if (res.status === 401) { clearTwitchSession(); return false; }
         const data   = await res.json();
-        const result = Array.isArray(data.data) && data.data.length > 0;
-        followerCache.set(key, result);
-        if (result) {
-            approvedCnt++;
-            document.getElementById('appr-count').innerText = approvedCnt;
-        }
-        return result;
+        return Array.isArray(data.data) && data.data.length > 0;
     } catch { return false; }
 }
 
