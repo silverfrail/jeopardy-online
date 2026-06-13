@@ -541,6 +541,8 @@ async function onChat(channel, tags, message) {
             }
             return;
         }
+    } else if (followersOnly && !twitchToken) {
+        log('Followers-only enabled but Twitch auth missing; allowing guess (verification unavailable).');
     }
 
     pendingGuess = { username, text: guessText };
@@ -566,7 +568,7 @@ async function isFollower(userId, login) {
     if (followerCache.has(key)) return followerCache.get(key);
     if (!broadcasterId || !twitchToken) return false;
     try {
-        let effectiveUserId = userId;
+        let effectiveUserId = /^\d+$/.test(String(userId || '')) ? String(userId) : null;
         if (!effectiveUserId) {
             effectiveUserId = await resolveUserIdByLogin(login);
         }
@@ -581,7 +583,7 @@ async function isFollower(userId, login) {
         );
         if (res.status === 401) { clearTwitchSession(); return false; }
         const data   = await res.json();
-        const result = (data.total || 0) > 0;
+        const result = Array.isArray(data.data) && data.data.length > 0;
         followerCache.set(key, result);
         if (result) {
             approvedCnt++;
