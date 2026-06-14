@@ -552,7 +552,10 @@ function updateFollowersOnly() {
     document.getElementById('tw-auth-section').style.display = checked ? '' : 'none';
     if (!checked && twitchToken) disconnectTwitch();
     // Sync change to Firebase so all dashboards agree
-    db.ref('settings/followersOnly').set(checked);
+    log(`Followers-only toggled → ${checked}. Writing to Firebase…`);
+    db.ref('settings/followersOnly').set(checked)
+        .then(() => log(`Firebase write OK: followersOnly = ${checked}`))
+        .catch(e => log(`Firebase write FAILED: ${e.message}`));
 }
 
 function disconnectTwitch() {
@@ -625,11 +628,13 @@ function listenChatPrimary() {
 function listenFollowersOnly() {
     db.ref('settings/followersOnly').on('value', snap => {
         const val = snap.val();
+        log(`Firebase followersOnly received: ${val}`);
         if (val === null) return; // not yet written
         const cb = document.getElementById('followers-only');
         if (!cb) return;
         // Only sync checkbox and auth-section visibility — never disconnect Twitch from a remote change
         if (cb.checked !== val) {
+            log(`Syncing checkbox to ${val}`);
             cb.checked = val;
             document.getElementById('tw-auth-section').style.display = val ? '' : 'none';
         }
