@@ -468,13 +468,11 @@ function initDashboard() {
     document.getElementById('auth-overlay').style.display = 'none';
     document.getElementById('ui').style.display = 'flex';
     document.getElementById('fb-dot').classList.add('on');
-    // Push current settings to Firebase so the preview overlay stays in sync
-    // Note: followersOnly is intentionally excluded — listenFollowersOnly() will read it from Firebase
-    db.ref('settings').update({ timerEnabled, timerSeconds });
     log('Dashboard initialized.');
     initListeners();
     listenChatPrimary();     // claim or observe chat-primary role
     listenFollowersOnly();   // sync followers-only setting across dashboards
+    listenTimerSettings();   // sync timer settings across dashboards
     initTMI();  // always listen to chat, regardless of OAuth state
     oauthReady.then(() => checkTwitchSession());
     // Release chat-primary lock when this tab closes
@@ -670,6 +668,33 @@ function listenFollowersOnly() {
             log(`Syncing checkbox to ${val}`);
             cb.checked = val;
             document.getElementById('tw-auth-section').style.display = val ? '' : 'none';
+        }
+    });
+}
+
+// ── MULTI-HOST: Shared Timer Settings ────────────────────────────────────────
+function listenTimerSettings() {
+    db.ref('boardState/hostSettings').on('value', snap => {
+        const val = snap.val();
+        if (!val) return;
+        let changed = false;
+        if (val.timerEnabled !== undefined && val.timerEnabled !== timerEnabled) {
+            timerEnabled = val.timerEnabled;
+            localStorage.setItem('cfg_timer_on', timerEnabled ? '1' : '0');
+            changed = true;
+        }
+        if (val.timerSeconds !== undefined && val.timerSeconds !== timerSeconds) {
+            timerSeconds = val.timerSeconds;
+            localStorage.setItem('cfg_timer_secs', String(timerSeconds));
+            changed = true;
+        }
+        if (!changed) return;
+        log(`Timer settings synced: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}.`);
+        // If the settings modal is open, update its inputs to reflect the new values
+        if (document.getElementById('settings-modal').classList.contains('open')) {
+            document.getElementById('stg-timer-on').checked         = timerEnabled;
+            document.getElementById('stg-timer-secs').value         = timerSeconds;
+            document.getElementById('stg-timer-opts').style.display = timerEnabled ? '' : 'none';
         }
     });
 }
@@ -1293,7 +1318,7 @@ function applySettings() {
     timerSeconds = Math.min(30, Math.max(5, parseInt(document.getElementById('stg-timer-secs').value, 10) || 20));
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
-    db.ref('settings').update({ timerEnabled, timerSeconds });
+    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds });
     closeModal('settings-modal');
     log(`Settings saved. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}.`);
 }
@@ -1304,8 +1329,8 @@ function confirmReset() {
     timerSeconds = Math.min(30, Math.max(5, parseInt(document.getElementById('cfg-timer-secs').value, 10) || 20));
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
-    // Push updated settings to Firebase so the preview overlay picks them up
-    db.ref('settings').update({ timerEnabled, timerSeconds });
+    // Push updated settings so other dashboards and preview overlay stay in sync
+    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds });
     // Reset game state
     db.ref('boardState/tiles').once('value', snap => {
         const tiles = snap.val();
