@@ -473,6 +473,7 @@ function initDashboard() {
     listenChatPrimary();     // claim or observe chat-primary role
     listenFollowersOnly();   // sync followers-only setting across dashboards
     listenTimerSettings();   // sync timer settings across dashboards
+    listenPendingGuess();    // sync pending guess panel across dashboards
     initTMI();  // always listen to chat, regardless of OAuth state
     oauthReady.then(() => checkTwitchSession());
     // Release chat-primary lock when this tab closes
@@ -699,6 +700,27 @@ function listenTimerSettings() {
     });
 }
 
+// ── MULTI-HOST: Shared Pending Guess ─────────────────────────────────────────
+function listenPendingGuess() {
+    db.ref('boardState/hostSettings/pendingGuess').on('value', snap => {
+        const val = snap.val();
+        pendingGuess = val || null;
+        if (val) {
+            showPending(val);
+        } else {
+            document.getElementById('pg-panel').style.display = 'none';
+            updateQueueIndicator();
+        }
+    });
+    db.ref('boardState/hostSettings/guessQueue').on('value', snap => {
+        guessQueue = snap.val() || [];
+        updateQueueIndicator();
+    });
+    db.ref('boardState/hostSettings/wrongGuessers').on('value', snap => {
+        wrongGuessers = new Set(snap.val() || []);
+    });
+}
+
 // ── TWITCH IRC (native WebSocket — no CDN dependency) ───────────────────────
 function parseTwitchIRC(raw) {
     let tagsStr = '', rest = raw;
@@ -841,6 +863,7 @@ async function onChat(channel, tags, message) {
         // Block new entries once the timer has expired
         if (timerExpired) return;
         guessQueue.push({ username, text: guessText });
+        db.ref('boardState/hostSettings/guessQueue').set(guessQueue);
         log(`Guess queued: ${username} → "${guessText}" (${guessQueue.length} in queue)`);
         updateQueueIndicator();
         return;
@@ -850,6 +873,7 @@ async function onChat(channel, tags, message) {
     if (timerExpired) return;
 
     pendingGuess = { username, text: guessText };
+    db.ref('boardState/hostSettings/pendingGuess').set(pendingGuess);
     showPending(pendingGuess);
     log(`Guess locked: ${username} → "${guessText}"`);
 }
@@ -970,11 +994,14 @@ function showPending({ username, text }) {
 
 function showNextGuess() {
     if (guessQueue.length === 0) {
+        pendingGuess = null;
+        db.ref('boardState/hostSettings/pendingGuess').set(null);
         document.getElementById('pg-panel').style.display = 'none';
         return;
     }
     const next = guessQueue.shift();
     pendingGuess = next;
+    db.ref('boardState/hostSettings').update({ pendingGuess: next, guessQueue: guessQueue.length ? guessQueue : null });
     showPending(next);
     log(`Next guess: ${next.username} → "${next.text}"`);
 }
@@ -1039,23 +1066,32 @@ function updateTimerDisplay() {
 
 function judgeGuess(correct) {
     if (!pendingGuess || !activeClue) return;
-    const clueContext = `[${activeClue.category} -$${activeClue.value}]`;
-    if (correct) {
-        adjustScore(pendingGuess.username, activeClue.value);
-        log(`✓ ${pendingGuess.username} correct on ${clueContext}! +$${activeClue.value}`);
-        dismissClue('correct');
-    } else {
-        wrongGuessers.add(pendingGuess.username.toLowerCase());
-        log(`✗ ${pendingGuess.username} wrong on ${clueContext}. Clue still open.`);
+    const guess = { ...pendingGuess };
+    const clue  = activeClue;
+    // Atomically claim the guess — prevents double-judging if both hosts click simultaneously
+    db.ref('boardState/hostSettings/pendingGuess').transaction(current => {
+        if (current === null) return; // already claimed — abort
+        return null;
+    }).then(result => {
+        if (!result.committed) return; // another host got there first
         pendingGuess = null;
-        showNextGuess();
-        updateQueueIndicator();
-        // If the timer already expired and the queue is now empty, auto-dismiss
-        if (timerExpired && !pendingGuess && guessQueue.length === 0) {
-            log('⏱ All queued answers judged — clue dismissed.');
-            dismissClue('timer-queue');
+        const clueContext = `[${clue.category} -$${clue.value}]`;
+        if (correct) {
+            adjustScore(guess.username, clue.value);
+            log(`✓ ${guess.username} correct on ${clueContext}! +$${clue.value}`);
+            dismissClue('correct');
+        } else {
+            wrongGuessers.add(guess.username.toLowerCase());
+            db.ref('boardState/hostSettings/wrongGuessers').set([...wrongGuessers]);
+            log(`✗ ${guess.username} wrong on ${clueContext}. Clue still open.`);
+            showNextGuess();
+            updateQueueIndicator();
+            if (timerExpired && !pendingGuess && guessQueue.length === 0) {
+                log('⏱ All queued answers judged — clue dismissed.');
+                dismissClue('timer-queue');
+            }
         }
-    }
+    });
 }
 
 function dismissClue(reason) {
@@ -1064,6 +1100,7 @@ function dismissClue(reason) {
     pendingGuess  = null;
     wrongGuessers = new Set();
     guessQueue    = [];
+    db.ref('boardState/hostSettings').update({ pendingGuess: null, guessQueue: null, wrongGuessers: null });
     document.getElementById('pg-panel').style.display = 'none';
     updateQueueIndicator();
     if (reason === 'manual') log('Clue manually dismissed.');
