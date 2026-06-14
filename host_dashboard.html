@@ -211,6 +211,7 @@
     <div class="mbox">
         <h3>⚙️ Settings</h3>
         <div id="stg-clue-warn" class="cfg-warning" style="display:none">⏸️ A clue is active — timer settings will apply to the next clue.</div>
+        <div id="stg-dd-lock-warn" class="cfg-warning" style="display:none">🔒 Daily Double settings are locked once the first clue is selected.</div>
 
         <div class="cfg-section">
             <div class="cfg-section-title">Countdown Timer</div>
@@ -257,40 +258,15 @@
             </div>
         </div>
 
+        <div class="cfg-section">
+            <div class="cfg-section-title">Reset Game</div>
+            <div style="font-size:0.8rem;color:var(--dim);margin-bottom:10px;">Marks all clues as unplayed and clears scores and activity log. Settings stay open so you can review before starting.</div>
+            <button class="btn-red" style="width:100%" onclick="resetGameState()">♻️ Reset Board &amp; Scores</button>
+        </div>
+
         <div class="mrow">
             <button class="btn-sec" onclick="closeModal('settings-modal')">Cancel</button>
             <button onclick="applySettings()">Apply</button>
-        </div>
-    </div>
-</div>
-
-<!-- ── Reset / Settings Modal ── -->
-<div class="modal" id="reset-modal">
-    <div class="mbox">
-        <h3>⚙️ Game Settings</h3>
-        <div class="cfg-warning">⚠️ Applying will reset the board, scores, and activity log.</div>
-
-        <div class="cfg-section">
-            <div class="cfg-section-title">Countdown Timer</div>
-            <div class="cfg-row">
-                <div class="cfg-row-main">
-                    <input type="checkbox" id="cfg-timer-on" onchange="document.getElementById('cfg-timer-opts').style.display=this.checked?'flex':'none'">
-                    <label for="cfg-timer-on">Enable countdown timer per clue</label>
-                </div>
-                <span class="tip" data-tip="When enabled, a timer starts each time a clue is opened. The clue auto-dismisses when it reaches zero. You can still dismiss manually at any time.">?</span>
-            </div>
-            <div id="cfg-timer-opts" class="cfg-sub-row" style="display:none;">
-                <label for="cfg-timer-secs">Seconds per clue</label>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="number" id="cfg-timer-secs" min="5" max="30" value="20">
-                    <span style="font-size:0.78rem;color:var(--dim);">5 – 30</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="mrow">
-            <button class="btn-sec" onclick="closeModal('reset-modal')">Cancel</button>
-            <button class="btn-red" onclick="confirmReset()">Reset &amp; Apply</button>
         </div>
     </div>
 </div>
@@ -304,11 +280,11 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v8</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v9</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
-        <button class="btn-red btn-sm" onclick="resetGame()">♻️ Reset</button>
+
     </div>
 
     <!-- Body -->
@@ -510,6 +486,7 @@ let ddWagerHandle       = null;  // setInterval handle for wager countdown
 let ddWagerRemaining    = 0;
 let lastCorrectAnswerer = null;  // username of most recent correct answerer
 let leaderboardScores   = {};    // cached scores for wager limit calc
+let gameStarted         = false; // true once first tile is clicked; locks DD settings
 
 // Handle implicit grant callback (token in URL hash) before anything else
 const oauthReady = handleOAuthCallback();
@@ -766,6 +743,9 @@ function listenTimerSettings() {
         if (val.ddWagerTimeout !== undefined && val.ddWagerTimeout !== ddWagerTimeout) {
             ddWagerTimeout = val.ddWagerTimeout; changed = true;
         }
+        if (val.gameStarted !== undefined && val.gameStarted !== gameStarted) {
+            gameStarted = val.gameStarted; changed = true;
+        }
         if (!changed) return;
         log(`Settings synced. Timer: ${timerEnabled ? timerSeconds + 's' : 'off'}. DD: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
         // If the settings modal is open, update its inputs to reflect the new values
@@ -777,6 +757,10 @@ function listenTimerSettings() {
             document.getElementById('stg-dd-count').value           = ddCount;
             document.getElementById('stg-dd-wager-timeout').value   = ddWagerTimeout;
             document.getElementById('stg-dd-opts').style.display    = ddEnabled ? 'block' : 'none';
+            document.getElementById('stg-dd-lock-warn').style.display = gameStarted ? '' : 'none';
+            document.getElementById('stg-dd-on').disabled           = gameStarted;
+            document.getElementById('stg-dd-count').disabled        = gameStarted;
+            document.getElementById('stg-dd-wager-timeout').disabled = gameStarted;
         }
     });
 }
@@ -1033,28 +1017,30 @@ function setClueUI(clue) {
         panel.style.display = 'none';
         if (ddView)   ddView.style.display   = 'none';
         if (clueView) clueView.style.display = '';
-        // If settings modal is open, unlock all inputs now that clue is gone
+        // If settings modal is open, unlock timer inputs (DD stays locked if game has started)
         if (document.getElementById('settings-modal').classList.contains('open')) {
             document.getElementById('stg-clue-warn').style.display       = 'none';
             document.getElementById('stg-timer-on').disabled             = false;
             document.getElementById('stg-timer-secs').disabled           = false;
-            document.getElementById('stg-dd-on').disabled                = false;
-            document.getElementById('stg-dd-count').disabled             = false;
-            document.getElementById('stg-dd-wager-timeout').disabled     = false;
+            document.getElementById('stg-dd-lock-warn').style.display    = gameStarted ? '' : 'none';
+            document.getElementById('stg-dd-on').disabled                = gameStarted;
+            document.getElementById('stg-dd-count').disabled             = gameStarted;
+            document.getElementById('stg-dd-wager-timeout').disabled     = gameStarted;
         }
         return;
     }
 
     panel.style.display = 'block';
 
-    // If settings modal is open, lock inputs while a clue is in progress
+    // If settings modal is open, lock timer inputs while a clue is in progress; DD always locked once game started
     if (document.getElementById('settings-modal').classList.contains('open')) {
         document.getElementById('stg-clue-warn').style.display       = '';
         document.getElementById('stg-timer-on').disabled             = true;
         document.getElementById('stg-timer-secs').disabled           = true;
-        document.getElementById('stg-dd-on').disabled                = true;
-        document.getElementById('stg-dd-count').disabled             = true;
-        document.getElementById('stg-dd-wager-timeout').disabled     = true;
+        document.getElementById('stg-dd-lock-warn').style.display    = gameStarted ? '' : 'none';
+        document.getElementById('stg-dd-on').disabled                = gameStarted;
+        document.getElementById('stg-dd-count').disabled             = gameStarted;
+        document.getElementById('stg-dd-wager-timeout').disabled     = gameStarted;
     }
 
     if (clue.status === 'daily-double') {
@@ -1377,6 +1363,10 @@ function renderBoard() {
             }
             if (!tile.played) {
                 d.onclick = () => {
+                    if (!gameStarted) {
+                        gameStarted = true;
+                        db.ref('boardState/hostSettings').update({ gameStarted: true });
+                    }
                     db.ref(`boardState/tiles/${origIdx}/played`).set(true);
                     if (tile.dd && lastCorrectAnswerer) {
                         // Trigger Daily Double flow
@@ -1563,15 +1553,20 @@ function commitUpload(resetScores) {
         log(`Daily Doubles assigned to ${n} tile(s).`);
     }
     db.ref('boardState').set({ categories: pendingUploadCategories, tiles });
+    db.ref('boardState/hostSettings').update({ gameStarted: false });
+    gameStarted = false;
     if (resetScores) {
         db.ref('leaderboard').set({});
+        db.ref('boardState/activityLog').set(null);
         log('Board uploaded. Scores reset.');
     } else {
         log('Board uploaded. Scores kept.');
     }
+    db.ref('activeClue').set({ status: 'inactive', tileId: null });
     pendingUploadTiles      = null;
     pendingUploadCategories = null;
     closeModal('upload-modal');
+    openSettings();
 }
 
 function generatePrompt() {
@@ -1618,12 +1613,30 @@ function importFile(files) {
     r.readAsText(files[0]);
 }
 
-function resetGame() {
-    // Populate modal with current settings before showing
-    document.getElementById('cfg-timer-on').checked         = timerEnabled;
-    document.getElementById('cfg-timer-secs').value         = timerSeconds;
-    document.getElementById('cfg-timer-opts').style.display = timerEnabled ? '' : 'none';
-    openModal('reset-modal');
+function resetGameState() {
+    // Reset tiles, scores, log, and active clue; unlock DD settings; keep modal open
+    gameStarted   = false;
+    pendingGuess  = null;
+    wrongGuessers = new Set();
+    guessQueue    = [];
+    clearClueTimer();
+    clearWagerTimer();
+    db.ref('boardState/hostSettings').update({ gameStarted: false, pendingGuess: null, guessQueue: null, wrongGuessers: null });
+    db.ref('boardState/tiles').once('value', snap => {
+        const tiles = snap.val();
+        if (tiles) tiles.forEach((t, i) => {
+            if (t.played) db.ref(`boardState/tiles/${i}/played`).set(false);
+        });
+    });
+    db.ref('leaderboard').set({});
+    db.ref('activeClue').set({ status: 'inactive', tileId: null });
+    db.ref('boardState/activityLog').set(null);
+    // Unlock DD inputs in the still-open settings modal
+    document.getElementById('stg-dd-lock-warn').style.display    = 'none';
+    document.getElementById('stg-dd-on').disabled                = false;
+    document.getElementById('stg-dd-count').disabled             = false;
+    document.getElementById('stg-dd-wager-timeout').disabled     = false;
+    log('Game reset. Configure settings and click Apply to start.');
 }
 
 function openSettings() {
@@ -1635,14 +1648,15 @@ function openSettings() {
     document.getElementById('stg-dd-count').value           = ddCount;
     document.getElementById('stg-dd-wager-timeout').value   = ddWagerTimeout;
     document.getElementById('stg-dd-opts').style.display    = ddEnabled ? 'block' : 'none';
-    // Disable all inputs if a clue is currently active
+    // Timer locked while clue active; DD locked once game has started
     const clueActive = activeClue && activeClue.status !== 'inactive';
-    document.getElementById('stg-clue-warn').style.display      = clueActive ? '' : 'none';
-    document.getElementById('stg-timer-on').disabled            = clueActive;
-    document.getElementById('stg-timer-secs').disabled          = clueActive;
-    document.getElementById('stg-dd-on').disabled               = clueActive;
-    document.getElementById('stg-dd-count').disabled            = clueActive;
-    document.getElementById('stg-dd-wager-timeout').disabled    = clueActive;
+    document.getElementById('stg-clue-warn').style.display       = clueActive ? '' : 'none';
+    document.getElementById('stg-timer-on').disabled             = clueActive;
+    document.getElementById('stg-timer-secs').disabled           = clueActive;
+    document.getElementById('stg-dd-lock-warn').style.display    = gameStarted ? '' : 'none';
+    document.getElementById('stg-dd-on').disabled                = gameStarted;
+    document.getElementById('stg-dd-count').disabled             = gameStarted;
+    document.getElementById('stg-dd-wager-timeout').disabled     = gameStarted;
     openModal('settings-modal');
 }
 
@@ -1659,28 +1673,7 @@ function applySettings() {
     log(`Settings saved. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}. Daily Doubles: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
 }
 
-function confirmReset() {
-    // Read and persist settings
-    timerEnabled = document.getElementById('cfg-timer-on').checked;
-    timerSeconds = Math.min(30, Math.max(5, parseInt(document.getElementById('cfg-timer-secs').value, 10) || 20));
-    localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
-    localStorage.setItem('cfg_timer_secs', String(timerSeconds));
-    // Push updated settings so other dashboards and preview overlay stay in sync
-    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds });
-    // Reset game state
-    db.ref('boardState/tiles').once('value', snap => {
-        const tiles = snap.val();
-        if (tiles) tiles.forEach((_, i) => db.ref(`boardState/tiles/${i}/played`).set(false));
-    });
-    db.ref('leaderboard').set({});
-    db.ref('activeClue').set({ status: 'inactive', tileId: null });
-    db.ref('boardState/activityLog').set(null);
-    pendingGuess  = null;
-    wrongGuessers = new Set();
-    clearClueTimer();
-    closeModal('reset-modal');
-    log(`Game reset. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}.`);
-}
+
 
 function triggerOBSRefresh() {
     db.ref('refreshTrigger').set(Date.now());
