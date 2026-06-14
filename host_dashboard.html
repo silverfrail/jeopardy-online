@@ -588,11 +588,8 @@ function claimChatPrimary() {
 }
 
 function releaseChatPrimary() {
-    // Only clear if we currently own it
-    chatPrimaryRef.transaction(current => {
-        if (current === SESSION_ID) return null;
-        return current; // leave it — someone else grabbed it
-    });
+    if (!isChatPrimary) return; // helper dashboards never touch the node
+    chatPrimaryRef.set(null);
 }
 
 function listenChatPrimary() {
