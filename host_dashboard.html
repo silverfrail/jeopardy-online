@@ -922,6 +922,13 @@ function setClueUI(clue) {
 
     panel.style.display = 'block';
 
+    // If settings modal is open, lock timer inputs while a clue is in progress
+    if (document.getElementById('settings-modal').classList.contains('open')) {
+        document.getElementById('stg-clue-warn').style.display = '';
+        document.getElementById('stg-timer-on').disabled       = true;
+        document.getElementById('stg-timer-secs').disabled     = true;
+    }
+
     if (clue.status === 'answer-reveal') {
         // Keep clue panel visible; hide question and active controls; show dismiss button
         document.getElementById('ac-cat').innerText  = clue.category || '';
