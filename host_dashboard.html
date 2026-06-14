@@ -249,7 +249,10 @@
                     </div>
                 </div>
                 <div class="cfg-sub-row" style="margin-top:6px;">
-                    <label for="stg-dd-wager-timeout">Wager timeout (seconds)</label>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <label for="stg-dd-wager-timeout">Wager timeout (seconds)</label>
+                        <span class="tip" data-tip="How long the Daily Double player has to type !wager in chat. If time runs out before they wager, the clue proceeds as a normal question with no wager.">?</span>
+                    </div>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <input type="number" id="stg-dd-wager-timeout" min="10" max="120" value="60">
                         <span style="font-size:0.78rem;color:var(--dim);">10 – 120</span>
@@ -280,7 +283,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v10</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v11</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -487,6 +490,7 @@ let ddWagerRemaining    = 0;
 let lastCorrectAnswerer = null;  // username of most recent correct answerer
 let leaderboardScores   = {};    // cached scores for wager limit calc
 let gameStarted         = false; // true once first tile is clicked; locks DD settings
+let clueScorers         = [];    // per-clue scorer records; written to tileResults on reveal
 
 // Handle implicit grant callback (token in URL hash) before anything else
 const oauthReady = handleOAuthCallback();
@@ -1191,12 +1195,14 @@ function judgeGuess(correct) {
         if (correct) {
             lastCorrectAnswerer = guess.username;
             adjustScore(guess.username, scoreAmt);
+            clueScorers.push({ username: guess.username, delta: scoreAmt, wager: isDD });
             log(`✓ ${guess.username} correct on ${clueContext}! +$${scoreAmt}`);
             dismissClue('correct');
         } else {
             if (isDD) {
                 // Daily Double: one shot only — deduct wager and dismiss immediately
                 adjustScore(guess.username, -scoreAmt);
+                clueScorers.push({ username: guess.username, delta: -scoreAmt, wager: true });
                 log(`✗ ${guess.username} wrong on DD ${clueContext}. -$${scoreAmt}`);
                 dismissClue('wrong-dd');
             } else {
@@ -1230,8 +1236,16 @@ function dismissClue(reason) {
 
 function revealAnswer() {
     const answer = activeClue?.answer;
+    const tileId = activeClue?.tileId;
+    // Write per-tile result to Firebase for the preview board
+    if (tileId != null) {
+        db.ref(`boardState/tileResults/${tileId}`).set({
+            answer: answer || '',
+            scorers: clueScorers.length ? clueScorers : null
+        });
+    }
+    clueScorers = [];
     if (!answer) {
-        // No answer stored — just go inactive
         db.ref('activeClue').set({ status: 'inactive', tileId: null });
         return;
     }
@@ -1415,6 +1429,7 @@ function initListeners() {
             // Start clue timer only when a genuinely new clue opens (not on board-reload)
             if (data.tileId !== lastActiveTileId) {
                 lastActiveTileId = data.tileId;
+                clueScorers = []; // reset scorer list for new clue
                 requestAnimationFrame(startClueTimer);
             }
         } else if (data?.status === 'daily-double') {
@@ -1423,6 +1438,7 @@ function initListeners() {
             // Start wager countdown only for a genuinely new DD event
             if (data.tileId !== lastActiveTileId) {
                 lastActiveTileId = data.tileId;
+                clueScorers = []; // reset scorer list for new DD
                 startWagerTimer(data.ddPlayer, data.ddWagerTimeout);
                 const lim = calcWagerLimits(data.ddPlayer || '');
                 sendChatMessage(`@${data.ddPlayer} You hit a Daily Double! Type !wager [amount]. Min: $${lim.min}, Max: $${lim.max}. You have ${data.ddWagerTimeout} seconds!`);
@@ -1618,6 +1634,7 @@ function resetGameState() {
     db.ref('leaderboard').set({});
     db.ref('activeClue').set({ status: 'inactive', tileId: null });
     db.ref('boardState/activityLog').set(null);
+    db.ref('boardState/tileResults').set(null);
     // Unlock DD inputs in the still-open settings modal
     document.getElementById('stg-dd-lock-warn').style.display    = 'none';
     document.getElementById('stg-dd-on').disabled                = false;

@@ -30,7 +30,11 @@
         /* ── Clue Grid ── */
         .clue-grid { display: grid; gap: 12px; }
         .clue-card { background: var(--panel); border: 1px solid rgba(0,0,255,0.25); color: var(--green); font-size: 2.4rem; font-weight: 900; display: flex; justify-content: center; align-items: center; border-radius: 6px; }
-        .clue-card.played { color: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.02); background: rgba(0,0,0,0.5); }
+        .clue-card.played { border-color: rgba(255,255,255,0.06); background: rgba(0,0,0,0.5); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 5px; gap: 3px; overflow: hidden; }
+        .tile-answer { color: rgba(255,255,255,0.55); font-size: 0.62rem; font-weight: 700; text-align: center; line-height: 1.2; word-break: break-word; max-width: 100%; }
+        .tile-scorer { font-size: 0.52rem; font-weight: 700; text-align: center; line-height: 1.3; }
+        .tile-scorer.correct { color: var(--green); }
+        .tile-scorer.wrong   { color: #ffaa44; }
 
         /* ── Clue Overlay ── */
         #clue-overlay { position: absolute; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--blue); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 10; }
@@ -189,6 +193,7 @@ db.ref('boardState').on('value', snap => {
     });
 
     // Tiles — stored column-major → displayed row-major
+    const tileResults = data.tileResults || {};
     const gridEl  = document.getElementById('grid');
     gridEl.innerHTML = '';
     for (let row = 0; row < numRows; row++) {
@@ -196,7 +201,28 @@ db.ref('boardState').on('value', snap => {
             const tile = data.tiles[col * numRows + row];
             const d    = document.createElement('div');
             d.className = 'clue-card' + (tile.played ? ' played' : '');
-            d.innerText = tile.played ? '' : `$${tile.value}`;
+            if (tile.played) {
+                const result  = tileResults[String(tile.id)] || {};
+                const answer  = result.answer || '';
+                const scorers = result.scorers || [];
+                if (answer) {
+                    const aEl = document.createElement('div');
+                    aEl.className = 'tile-answer';
+                    aEl.textContent = answer;
+                    d.appendChild(aEl);
+                }
+                scorers.forEach(s => {
+                    const sEl  = document.createElement('div');
+                    const sign = s.delta >= 0 ? '+' : '−';
+                    const abs  = Math.abs(s.delta);
+                    const wagerLabel = s.wager ? ' wager' : '';
+                    sEl.className   = 'tile-scorer ' + (s.delta >= 0 ? 'correct' : 'wrong');
+                    sEl.textContent = `${s.username} ${sign}$${abs}${wagerLabel}`;
+                    d.appendChild(sEl);
+                });
+            } else {
+                d.innerText = `$${tile.value}`;
+            }
             gridEl.appendChild(d);
         }
     }
