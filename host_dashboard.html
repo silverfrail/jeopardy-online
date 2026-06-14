@@ -264,7 +264,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v4</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v5</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -921,6 +921,13 @@ function setClueUI(clue) {
     }
 
     panel.style.display = 'block';
+
+    // If settings modal is open, lock timer inputs while a clue is in progress
+    if (document.getElementById('settings-modal').classList.contains('open')) {
+        document.getElementById('stg-clue-warn').style.display = '';
+        document.getElementById('stg-timer-on').disabled       = true;
+        document.getElementById('stg-timer-secs').disabled     = true;
+    }
 
     if (clue.status === 'answer-reveal') {
         // Keep clue panel visible; hide question and active controls; show dismiss button
