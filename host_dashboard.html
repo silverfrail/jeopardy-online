@@ -911,6 +911,12 @@ function setClueUI(clue) {
 
     if (!clue || clue.status === 'inactive') {
         panel.style.display = 'none';
+        // If settings modal is open, unlock timer inputs now that clue is gone
+        if (document.getElementById('settings-modal').classList.contains('open')) {
+            document.getElementById('stg-clue-warn').style.display = 'none';
+            document.getElementById('stg-timer-on').disabled       = false;
+            document.getElementById('stg-timer-secs').disabled     = false;
+        }
         return;
     }
 
