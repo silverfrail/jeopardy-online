@@ -36,6 +36,14 @@
         #clue-overlay { position: absolute; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--blue); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 10; }
         #clue-overlay.active { opacity: 1; }
 
+        /* ── Daily Double Overlay ── */
+        #dd-overlay { position: absolute; inset: 0; background: rgba(10,6,0,0.98); border: 4px solid var(--yellow); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 12; }
+        #dd-overlay.active { opacity: 1; }
+        .ov-dd-flash  { color: var(--yellow); font-size: 5rem; font-weight: 900; letter-spacing: 0.08em; line-height: 1.1; text-shadow: 0 0 40px rgba(255,255,90,0.5); }
+        .ov-dd-cat    { color: rgba(255,255,255,0.6); font-size: 1.6rem; font-weight: 700; text-transform: uppercase; margin-top: 18px; }
+        .ov-dd-player { color: #fff; font-size: 2.2rem; font-weight: 900; margin-top: 10px; }
+        .ov-dd-prompt { color: var(--yellow); font-size: 1.4rem; font-weight: 600; margin-top: 20px; opacity: 0.8; }
+
         /* ── Answer Reveal Overlay ── */
         #answer-overlay { position: absolute; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--green); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 11; }
         #answer-overlay.active { opacity: 1; }
@@ -86,6 +94,12 @@
     <div class="game-area">
         <div class="cat-row"  id="cats"></div>
         <div class="clue-grid" id="grid"></div>
+        <div id="dd-overlay">
+            <div class="ov-dd-flash">⭐ DAILY DOUBLE ⭐</div>
+            <div class="ov-dd-cat" id="ov-dd-cat"></div>
+            <div class="ov-dd-player" id="ov-dd-player"></div>
+            <div class="ov-dd-prompt">Waiting for wager...</div>
+        </div>
         <div id="clue-overlay">
             <div class="ov-cat" id="ov-cat"></div>
             <div class="ov-val" id="ov-val"></div>
@@ -190,29 +204,45 @@ db.ref('boardState').on('value', snap => {
 
 // ── ACTIVE CLUE LISTENER ─────────────────────────────────────────────────────
 db.ref('activeClue').on('value', snap => {
-    const clue    = snap.val();
-    const overlay = document.getElementById('clue-overlay');
+    const clue        = snap.val();
+    const overlay     = document.getElementById('clue-overlay');
     const answerOverlay = document.getElementById('answer-overlay');
-    if (clue?.status === 'active' && clue.question) {
-        document.getElementById('ov-cat').innerText = clue.category || '';
-        document.getElementById('ov-val').innerText = `$${clue.value}`;
-        document.getElementById('ov-txt').innerText = clue.question;
-        overlay.classList.add('active');
+    const ddOverlay   = document.getElementById('dd-overlay');
+
+    if (clue?.status === 'daily-double') {
+        // Show DD splash, hide everything else
+        ddOverlay.classList.add('active');
+        overlay.classList.remove('active');
         answerOverlay.classList.remove('active');
+        clearPreviewTimer();
+        document.getElementById('ov-dd-cat').innerText    = clue.category || '';
+        document.getElementById('ov-dd-player').innerText = clue.ddPlayer ? `@${clue.ddPlayer}` : '';
+        pvActiveTileId = null;
+    } else if (clue?.status === 'active' || clue?.status === 'daily-double-active') {
+        ddOverlay.classList.remove('active');
+        answerOverlay.classList.remove('active');
+        const valLabel = (clue.status === 'daily-double-active' && clue.ddWager)
+            ? `$${clue.value} · Wager: $${clue.ddWager}`
+            : `$${clue.value}`;
+        document.getElementById('ov-cat').innerText = clue.category || '';
+        document.getElementById('ov-val').innerText = valLabel;
+        document.getElementById('ov-txt').innerText = clue.question || '';
+        overlay.classList.add('active');
         if (clue.tileId !== pvActiveTileId) {
             pvActiveTileId = clue.tileId;
-            // Read timer config directly from the clue — avoids race with settings listener
             pvTimerEnabled = !!clue.timerEnabled;
             pvTimerSeconds = Math.min(30, Math.max(5, clue.timerSeconds || 20));
             requestAnimationFrame(startPreviewTimer);
         }
     } else if (clue?.status === 'answer-reveal') {
+        ddOverlay.classList.remove('active');
         overlay.classList.remove('active');
         clearPreviewTimer();
         pvActiveTileId = null;
         document.getElementById('ov-ar-answer').innerText = clue.answer || '';
         answerOverlay.classList.add('active');
     } else {
+        ddOverlay.classList.remove('active');
         overlay.classList.remove('active');
         answerOverlay.classList.remove('active');
         pvActiveTileId = null;
