@@ -211,13 +211,20 @@ db.ref('boardState').on('value', snap => {
                     aEl.textContent = answer;
                     d.appendChild(aEl);
                 }
-                scorers.forEach(s => {
-                    const sEl  = document.createElement('div');
-                    const sign = s.delta >= 0 ? '+' : '−';
-                    const abs  = Math.abs(s.delta);
-                    const wagerLabel = s.wager ? ' wager' : '';
-                    sEl.className   = 'tile-scorer ' + (s.delta >= 0 ? 'correct' : 'wrong');
-                    sEl.textContent = `${s.username} ${sign}$${abs}${wagerLabel}`;
+                // Sort: correct (delta > 0) first, then wrong (delta <= 0)
+                const sorted = [...scorers].sort((a, b) => b.delta - a.delta);
+                sorted.forEach(s => {
+                    const sEl = document.createElement('div');
+                    if (s.delta === 0) {
+                        sEl.className   = 'tile-scorer wrong';
+                        sEl.textContent = `${s.username} ✗`;
+                    } else {
+                        const sign       = s.delta >= 0 ? '+' : '−';
+                        const abs        = Math.abs(s.delta);
+                        const wagerLabel = s.wager && s.delta < 0 ? ' wager' : (s.wager && s.delta > 0 ? ' wager' : '');
+                        sEl.className   = 'tile-scorer ' + (s.delta >= 0 ? 'correct' : 'wrong');
+                        sEl.textContent = `${s.username} ${sign}$${abs}${s.wager ? ' wager' : ''}`;
+                    }
                     d.appendChild(sEl);
                 });
             } else {

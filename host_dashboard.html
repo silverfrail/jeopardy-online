@@ -232,6 +232,24 @@
         </div>
 
         <div class="cfg-section">
+            <div class="cfg-section-title">Scoring</div>
+            <div class="cfg-row">
+                <div class="cfg-row-main">
+                    <input type="checkbox" id="stg-penalty-regular" checked>
+                    <label for="stg-penalty-regular">Deduct points for wrong answers on regular clues</label>
+                </div>
+                <span class="tip" data-tip="When enabled, a wrong answer deducts the clue's full value from the player's score.">?</span>
+            </div>
+            <div class="cfg-row" style="margin-top:6px;">
+                <div class="cfg-row-main">
+                    <input type="checkbox" id="stg-penalty-dd" checked>
+                    <label for="stg-penalty-dd">Deduct points for wrong answers on Daily Doubles</label>
+                </div>
+                <span class="tip" data-tip="When enabled, a wrong Daily Double answer deducts the wagered amount from the player's score.">?</span>
+            </div>
+        </div>
+
+        <div class="cfg-section">
             <div class="cfg-section-title">Daily Doubles</div>
             <div class="cfg-row">
                 <div class="cfg-row-main">
@@ -283,7 +301,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v11</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v12</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -491,6 +509,8 @@ let lastCorrectAnswerer = null;  // username of most recent correct answerer
 let leaderboardScores   = {};    // cached scores for wager limit calc
 let gameStarted         = false; // true once first tile is clicked; locks DD settings
 let clueScorers         = [];    // per-clue scorer records; written to tileResults on reveal
+let penaltyRegular      = true;  // deduct points for wrong regular clue answers
+let penaltyDD           = true;  // deduct points for wrong DD answers
 
 // Handle implicit grant callback (token in URL hash) before anything else
 const oauthReady = handleOAuthCallback();
@@ -750,6 +770,12 @@ function listenTimerSettings() {
         if (val.gameStarted !== undefined && val.gameStarted !== gameStarted) {
             gameStarted = val.gameStarted; changed = true;
         }
+        if (val.penaltyRegular !== undefined && val.penaltyRegular !== penaltyRegular) {
+            penaltyRegular = val.penaltyRegular; changed = true;
+        }
+        if (val.penaltyDD !== undefined && val.penaltyDD !== penaltyDD) {
+            penaltyDD = val.penaltyDD; changed = true;
+        }
         if (!changed) return;
         log(`Settings synced. Timer: ${timerEnabled ? timerSeconds + 's' : 'off'}. DD: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
         // If the settings modal is open, update its inputs to reflect the new values
@@ -765,6 +791,10 @@ function listenTimerSettings() {
             document.getElementById('stg-dd-on').disabled           = gameStarted;
             document.getElementById('stg-dd-count').disabled        = gameStarted;
             document.getElementById('stg-dd-wager-timeout').disabled = gameStarted;
+            document.getElementById('stg-penalty-regular').checked  = penaltyRegular;
+            document.getElementById('stg-penalty-dd').checked       = penaltyDD;
+            document.getElementById('stg-penalty-regular').checked  = penaltyRegular;
+            document.getElementById('stg-penalty-dd').checked       = penaltyDD;
         }
     });
 }
@@ -1200,15 +1230,18 @@ function judgeGuess(correct) {
             dismissClue('correct');
         } else {
             if (isDD) {
-                // Daily Double: one shot only — deduct wager and dismiss immediately
-                adjustScore(guess.username, -scoreAmt);
-                clueScorers.push({ username: guess.username, delta: -scoreAmt, wager: true });
-                log(`✗ ${guess.username} wrong on DD ${clueContext}. -$${scoreAmt}`);
+                const deduct = penaltyDD ? scoreAmt : 0;
+                if (deduct > 0) adjustScore(guess.username, -deduct);
+                clueScorers.push({ username: guess.username, delta: -deduct, wager: true });
+                log(`✗ ${guess.username} wrong on DD ${clueContext}.${deduct > 0 ? ` -$${deduct}` : ' No penalty.'}`);
                 dismissClue('wrong-dd');
             } else {
+                const deduct = penaltyRegular ? clue.value : 0;
+                if (deduct > 0) adjustScore(guess.username, -deduct);
                 wrongGuessers.add(guess.username.toLowerCase());
                 db.ref('boardState/hostSettings/wrongGuessers').set([...wrongGuessers]);
-                log(`✗ ${guess.username} wrong on ${clueContext}. Clue still open.`);
+                clueScorers.push({ username: guess.username, delta: -deduct, wager: false });
+                log(`✗ ${guess.username} wrong on ${clueContext}.${deduct > 0 ? ` -$${deduct}` : ' No penalty.'}`);
                 showNextGuess();
                 updateQueueIndicator();
                 if (timerExpired && !pendingGuess && guessQueue.length === 0) {
@@ -1652,6 +1685,8 @@ function openSettings() {
     document.getElementById('stg-dd-count').value           = ddCount;
     document.getElementById('stg-dd-wager-timeout').value   = ddWagerTimeout;
     document.getElementById('stg-dd-opts').style.display    = ddEnabled ? 'block' : 'none';
+    document.getElementById('stg-penalty-regular').checked  = penaltyRegular;
+    document.getElementById('stg-penalty-dd').checked       = penaltyDD;
     // Timer locked while clue active; DD locked once game has started
     const clueActive = activeClue && activeClue.status !== 'inactive';
     document.getElementById('stg-clue-warn').style.display       = clueActive ? '' : 'none';
@@ -1670,9 +1705,11 @@ function applySettings() {
     ddEnabled      = document.getElementById('stg-dd-on').checked;
     ddCount        = Math.min(5, Math.max(1, parseInt(document.getElementById('stg-dd-count').value, 10) || 1));
     ddWagerTimeout = Math.min(120, Math.max(10, parseInt(document.getElementById('stg-dd-wager-timeout').value, 10) || 60));
+    penaltyRegular = document.getElementById('stg-penalty-regular').checked;
+    penaltyDD      = document.getElementById('stg-penalty-dd').checked;
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
-    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds, ddEnabled, ddCount, ddWagerTimeout });
+    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds, ddEnabled, ddCount, ddWagerTimeout, penaltyRegular, penaltyDD });
 
     // (Re)assign Daily Doubles on the board if the game hasn't started yet
     if (!gameStarted) {
