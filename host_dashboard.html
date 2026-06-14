@@ -409,7 +409,7 @@ const SESSION_ID = (() => {
     return id;
 })();
 let isChatPrimary   = false;  // true only for the dashboard that owns chat processing
-const chatPrimaryRef = db.ref('settings/chatPrimary'); // Firebase node for chat primary election
+const chatPrimaryRef = db.ref('boardState/hostSettings/chatPrimary'); // Firebase node for chat primary election
 
 // Handle implicit grant callback (token in URL hash) before anything else
 const oauthReady = handleOAuthCallback();
@@ -554,7 +554,7 @@ function updateFollowersOnly() {
     if (!checked && twitchToken) disconnectTwitch();
     // Sync change to Firebase so all dashboards agree
     log(`Followers-only toggled → ${checked}. Writing to Firebase…`);
-    db.ref('settings/followersOnly').set(checked)
+    db.ref('boardState/hostSettings/followersOnly').set(checked)
         .then(() => log(`Firebase write OK: followersOnly = ${checked}`))
         .catch(e => log(`Firebase write FAILED: ${e.message}`));
 }
@@ -569,7 +569,7 @@ function disconnectTwitch() {
 }
 
 // ── MULTI-HOST: Chat Primary ─────────────────────────────────────────────────
-// Firebase node: settings/chatPrimary = SESSION_ID of current owner, or null.
+// Firebase node: boardState/hostSettings/chatPrimary = SESSION_ID of current owner, or null.
 // First dashboard to open claims it. The other becomes helper and shows "Claim" button.
 // Owner is released on page unload; helper can steal it at any time.
 
@@ -627,7 +627,7 @@ function listenChatPrimary() {
 
 // ── MULTI-HOST: Shared Followers-Only ──────────────────────────────────────
 function listenFollowersOnly() {
-    db.ref('settings/followersOnly').on('value', snap => {
+    db.ref('boardState/hostSettings/followersOnly').on('value', snap => {
         const val = snap.val();
         log(`Firebase followersOnly received: ${val}`);
         if (val === null) return; // not yet written
