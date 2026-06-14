@@ -436,7 +436,8 @@ function initDashboard() {
     document.getElementById('ui').style.display = 'flex';
     document.getElementById('fb-dot').classList.add('on');
     // Push current settings to Firebase so the preview overlay stays in sync
-    db.ref('settings').update({ timerEnabled, timerSeconds, followersOnly: document.getElementById('followers-only').checked });
+    // Note: followersOnly is intentionally excluded — listenFollowersOnly() will read it from Firebase
+    db.ref('settings').update({ timerEnabled, timerSeconds });
     log('Dashboard initialized.');
     initListeners();
     listenChatPrimary();     // claim or observe chat-primary role
@@ -1243,7 +1244,7 @@ function confirmReset() {
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
     // Push updated settings to Firebase so the preview overlay picks them up
-    db.ref('settings').set({ timerEnabled, timerSeconds, followersOnly: document.getElementById('followers-only').checked });
+    db.ref('settings').update({ timerEnabled, timerSeconds });
     // Reset game state
     db.ref('boardState/tiles').once('value', snap => {
         const tiles = snap.val();
