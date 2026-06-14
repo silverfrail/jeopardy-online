@@ -252,7 +252,7 @@
                             <div class="ac-cat" id="ac-cat"></div>
                             <div class="ac-val" id="ac-val"></div>
                         </div>
-                        <button class="btn-sec btn-sm" onclick="dismissClue('manual')">Dismiss Clue</button>
+                        <button class="btn-sec btn-sm" id="dismiss-clue-btn" onclick="dismissClue('manual')">Dismiss Clue</button>
                     </div>
                     <div class="ac-q"   id="ac-q"></div>
                     <div class="ac-albl">Correct Answer</div>
@@ -276,13 +276,11 @@
                         </div>
                         <div id="pg-queue" style="font-size:0.72rem;color:var(--dim);margin-top:8px;display:none;"></div>
                     </div>
-                </div>
 
-                <!-- Answer reveal view (shown after clue ends, before host dismisses) -->
-                <div id="ar-view" style="display:none;">
-                    <div class="ar-label">The answer was</div>
-                    <div class="ar-answer" id="ar-answer"></div>
-                    <button class="btn-sec" style="width:100%;margin-top:14px;" onclick="clearReveal()">Dismiss Answer</button>
+                    <!-- Dismiss Answer (shown only during answer-reveal state) -->
+                    <div id="ar-dismiss" style="display:none;margin-top:12px;">
+                        <button class="btn-sec" style="width:100%;" onclick="clearReveal()">Dismiss Answer</button>
+                    </div>
                 </div>
 
             </div>
@@ -738,15 +736,39 @@ function matchScore(guess, answer) {
 
 // ── CLUE UI ───────────────────────────────────────────────────────────────────
 function setClueUI(clue) {
-    if (!clue || clue.status !== 'active') {
-        document.getElementById('ac-panel').style.display = 'none';
+    const panel      = document.getElementById('ac-panel');
+    const pgPanel    = document.getElementById('pg-panel');
+    const arDismiss  = document.getElementById('ar-dismiss');
+    const dismissBtn = document.getElementById('dismiss-clue-btn');
+
+    if (!clue || clue.status === 'inactive') {
+        panel.style.display = 'none';
         return;
     }
-    document.getElementById('ac-cat').innerText = clue.category || '';
-    document.getElementById('ac-val').innerText = `$${clue.value}`;
-    document.getElementById('ac-q').innerText   = clue.question || '';
-    document.getElementById('ac-ans').innerText = clue.answer   || '—';
-    document.getElementById('ac-panel').style.display = 'block';
+
+    panel.style.display = 'block';
+
+    if (clue.status === 'answer-reveal') {
+        // Keep clue panel visible; hide question and active controls; show dismiss button
+        document.getElementById('ac-cat').innerText  = clue.category || '';
+        document.getElementById('ac-val').innerText  = `$${clue.value}`;
+        document.getElementById('ac-q').innerText    = '';
+        document.getElementById('ac-albl').innerText = 'The answer was';
+        document.getElementById('ac-ans').innerText  = clue.answer || '—';
+        if (pgPanel)    pgPanel.style.display   = 'none';
+        if (arDismiss)  arDismiss.style.display  = 'block';
+        if (dismissBtn) dismissBtn.style.display = 'none';
+        return;
+    }
+
+    // active — restore labels and show normal controls
+    document.getElementById('ac-albl').innerText = 'Correct Answer';
+    document.getElementById('ac-cat').innerText  = clue.category || '';
+    document.getElementById('ac-val').innerText  = `$${clue.value}`;
+    document.getElementById('ac-q').innerText    = clue.question || '';
+    document.getElementById('ac-ans').innerText  = clue.answer   || '—';
+    if (arDismiss)  arDismiss.style.display  = 'none';
+    if (dismissBtn) dismissBtn.style.display = '';
 }
 
 function showPending({ username, text }) {
