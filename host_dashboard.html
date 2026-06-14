@@ -233,6 +233,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v1</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-red btn-sm" onclick="resetGame()">♻️ Reset</button>
@@ -552,7 +553,10 @@ function updateFollowersOnly() {
     document.getElementById('tw-auth-section').style.display = checked ? '' : 'none';
     if (!checked && twitchToken) disconnectTwitch();
     // Sync change to Firebase so all dashboards agree
-    db.ref('settings/followersOnly').set(checked);
+    log(`Followers-only toggled → ${checked}. Writing to Firebase…`);
+    db.ref('settings/followersOnly').set(checked)
+        .then(() => log(`Firebase write OK: followersOnly = ${checked}`))
+        .catch(e => log(`Firebase write FAILED: ${e.message}`));
 }
 
 function disconnectTwitch() {
@@ -625,11 +629,13 @@ function listenChatPrimary() {
 function listenFollowersOnly() {
     db.ref('settings/followersOnly').on('value', snap => {
         const val = snap.val();
+        log(`Firebase followersOnly received: ${val}`);
         if (val === null) return; // not yet written
         const cb = document.getElementById('followers-only');
         if (!cb) return;
         // Only sync checkbox and auth-section visibility — never disconnect Twitch from a remote change
         if (cb.checked !== val) {
+            log(`Syncing checkbox to ${val}`);
             cb.checked = val;
             document.getElementById('tw-auth-section').style.display = val ? '' : 'none';
         }
