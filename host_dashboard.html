@@ -399,7 +399,14 @@ let timerExpired    = false;   // true after timer hits zero — blocks new gues
 let lastActiveTileId = null;
 
 // ── MULTI-HOST ─────────────────────────────────────────────────────────────────
-const SESSION_ID    = Math.random().toString(36).slice(2); // unique per page load
+// Persist session ID across same-tab refreshes (Ctrl+Shift+R) so Primary stays Primary.
+// sessionStorage is cleared when the tab is actually closed, so a new tab always gets a fresh ID.
+const SESSION_ID = (() => {
+    const key = 'dashboard_session_id';
+    let id = sessionStorage.getItem(key);
+    if (!id) { id = Math.random().toString(36).slice(2); sessionStorage.setItem(key, id); }
+    return id;
+})();
 let isChatPrimary   = false;  // true only for the dashboard that owns chat processing
 
 // Handle implicit grant callback (token in URL hash) before anything else
