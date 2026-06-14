@@ -121,6 +121,14 @@
         .log-entry { margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 4px; }
         .log-time { color: var(--dim); margin-right: 6px; font-family: monospace; }
 
+        /* ── Chat Primary Badge ── */
+        .chat-role-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .chat-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 99px; letter-spacing: 0.04em; }
+        .chat-badge.primary { background: rgba(0,200,100,0.15); color: #00c864; border: 1px solid rgba(0,200,100,0.35); }
+        .chat-badge.helper  { background: rgba(255,255,255,0.06); color: var(--dim); border: 1px solid var(--border); }
+        .claim-btn { font-size: 0.72rem; padding: 3px 8px; background: rgba(90,90,180,0.18); border: 1px solid var(--border); color: var(--dim); border-radius: 5px; cursor: pointer; }
+        .claim-btn:hover { background: rgba(90,90,180,0.35); color: var(--text); }
+
         /* ── Tooltip ── */
         .tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: #383858; color: var(--dim); font-size: 0.65rem; font-weight: 700; cursor: default; margin-left: 5px; flex-shrink: 0; }
         .tip::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); left: 0; background: #222240; color: #fff; font-size: 0.75rem; font-weight: 400; padding: 7px 10px; border-radius: 5px; white-space: normal; width: 185px; line-height: 1.4; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--border); z-index: 999; }
@@ -294,6 +302,12 @@
             <div class="panel">
                 <div class="ptitle">Twitch</div>
 
+                <!-- Chat host role indicator -->
+                <div class="chat-role-row">
+                    <span id="chat-badge" class="chat-badge helper">Helper</span>
+                    <button id="claim-btn" class="claim-btn" onclick="claimChatPrimary()" style="display:none">Claim Primary</button>
+                </div>
+
                 <!-- Followers only toggle — always visible -->
                 <div class="toggle-row" style="margin-bottom:10px;">
                     <input type="checkbox" id="followers-only" checked onchange="updateFollowersOnly()">
@@ -384,6 +398,10 @@ let timerRemaining  = 0;
 let timerExpired    = false;   // true after timer hits zero — blocks new guesses
 let lastActiveTileId = null;
 
+// ── MULTI-HOST ─────────────────────────────────────────────────────────────────
+const SESSION_ID    = Math.random().toString(36).slice(2); // unique per page load
+let isChatPrimary   = false;  // true only for the dashboard that owns chat processing
+
 // Handle implicit grant callback (token in URL hash) before anything else
 const oauthReady = handleOAuthCallback();
 
@@ -410,11 +428,15 @@ function initDashboard() {
     document.getElementById('ui').style.display = 'flex';
     document.getElementById('fb-dot').classList.add('on');
     // Push current settings to Firebase so the preview overlay stays in sync
-    db.ref('settings').set({ timerEnabled, timerSeconds });
+    db.ref('settings').set({ timerEnabled, timerSeconds, followersOnly: document.getElementById('followers-only').checked });
     log('Dashboard initialized.');
     initListeners();
+    listenChatPrimary();     // claim or observe chat-primary role
+    listenFollowersOnly();   // sync followers-only setting across dashboards
     initTMI();  // always listen to chat, regardless of OAuth state
     oauthReady.then(() => checkTwitchSession());
+    // Release chat-primary lock when this tab closes
+    window.addEventListener('beforeunload', releaseChatPrimary);
 }
 
 function unlock() {
@@ -519,6 +541,8 @@ function updateFollowersOnly() {
     const checked = document.getElementById('followers-only').checked;
     document.getElementById('tw-auth-section').style.display = checked ? '' : 'none';
     if (!checked && twitchToken) disconnectTwitch();
+    // Sync change to Firebase so all dashboards agree
+    db.ref('settings/followersOnly').set(checked);
 }
 
 function disconnectTwitch() {
@@ -531,6 +555,84 @@ function disconnectTwitch() {
     document.getElementById('tw-connected').style.display = 'none';
     document.getElementById('tw-dot').classList.remove('on');
     log('Twitch disconnected.');
+}
+
+// ── MULTI-HOST: Chat Primary ─────────────────────────────────────────────────
+// Firebase node: settings/chatPrimary = SESSION_ID of current owner, or null.
+// First dashboard to open claims it. The other becomes helper and shows "Claim" button.
+// Owner is released on page unload; helper can steal it at any time.
+
+const chatPrimaryRef = db.ref('settings/chatPrimary');
+
+function updateChatBadge() {
+    const badge     = document.getElementById('chat-badge');
+    const claimBtn  = document.getElementById('claim-btn');
+    if (isChatPrimary) {
+        badge.textContent  = '● Chat Primary';
+        badge.className    = 'chat-badge primary';
+        claimBtn.style.display = 'none';
+    } else {
+        badge.textContent  = 'Chat Helper';
+        badge.className    = 'chat-badge helper';
+        claimBtn.style.display = '';
+    }
+}
+
+function claimChatPrimary() {
+    // Unconditionally write our session ID — takes over from whoever held it
+    chatPrimaryRef.set(SESSION_ID).then(() => {
+        isChatPrimary = true;
+        updateChatBadge();
+        log('This dashboard is now Chat Primary.');
+    });
+}
+
+function releaseChatPrimary() {
+    // Only clear if we currently own it
+    chatPrimaryRef.transaction(current => {
+        if (current === SESSION_ID) return null;
+        return current; // leave it — someone else grabbed it
+    });
+}
+
+function listenChatPrimary() {
+    chatPrimaryRef.on('value', snap => {
+        const owner = snap.val();
+        if (owner === null) {
+            // Nobody owns it — claim automatically
+            chatPrimaryRef.transaction(current => {
+                if (current === null) return SESSION_ID;
+                return current; // someone beat us to it
+            }).then(result => {
+                if (result.snapshot.val() === SESSION_ID) {
+                    isChatPrimary = true;
+                    log('This dashboard is now Chat Primary (auto-claimed).');
+                } else {
+                    isChatPrimary = false;
+                }
+                updateChatBadge();
+            });
+        } else {
+            isChatPrimary = (owner === SESSION_ID);
+            updateChatBadge();
+        }
+    });
+}
+
+// ── MULTI-HOST: Shared Followers-Only ──────────────────────────────────────
+function listenFollowersOnly() {
+    db.ref('settings/followersOnly').on('value', snap => {
+        const val = snap.val();
+        if (val === null) return; // not yet written
+        const cb = document.getElementById('followers-only');
+        if (!cb) return;
+        // Only update DOM if value differs — avoids triggering updateFollowersOnly → Firebase loop
+        if (cb.checked !== val) {
+            cb.checked = val;
+            document.getElementById('tw-auth-section').style.display = val ? '' : 'none';
+            if (!val && twitchToken) disconnectTwitch();
+        }
+    });
 }
 
 // ── TWITCH IRC (native WebSocket — no CDN dependency) ───────────────────────
@@ -623,6 +725,7 @@ function initTMI() {
 }
 
 function sendChatMessage(text) {
+    if (!isChatPrimary) return; // only the primary host sends chat
     if (!twitchToken || !twitchLogin) { log('Chat reply skipped: Twitch not connected.'); return; }
     const safe = String(text || '').replace(/[\r\n]+/g, ' ').trim();
     if (!safe) return;
@@ -637,6 +740,7 @@ function sendChatMessage(text) {
 }
 
 async function onChat(channel, tags, message) {
+    if (!isChatPrimary) return; // helper dashboards ignore incoming guesses entirely
     const msg = message.trim();
     if (!msg.toLowerCase().startsWith('!guess')) return;
 
@@ -1139,7 +1243,7 @@ function confirmReset() {
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
     // Push updated settings to Firebase so the preview overlay picks them up
-    db.ref('settings').set({ timerEnabled, timerSeconds });
+    db.ref('settings').set({ timerEnabled, timerSeconds, followersOnly: document.getElementById('followers-only').checked });
     // Reset game state
     db.ref('boardState/tiles').once('value', snap => {
         const tiles = snap.val();
