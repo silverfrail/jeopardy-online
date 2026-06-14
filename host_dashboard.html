@@ -465,12 +465,13 @@ if (sessionStorage.getItem('dashboard_unlocked')) { initDashboard(); }
 // ── TWITCH OAUTH (Implicit Grant) ────────────────────────────────────────────
 function startTwitchAuth() {
     const state = randomStr(16);
-    localStorage.setItem('oauth_state', state);
+    try { localStorage.setItem('oauth_state', state); } catch(e) { log('Warning: localStorage unavailable — state check skipped.'); }
     const p = new URLSearchParams({
         client_id: CLIENT_ID, redirect_uri: REDIRECT_URI,
         response_type: 'token', scope: SCOPES,
         force_verify: 'false', state
     });
+    log('Redirecting to Twitch auth…');
     window.location.href = `https://id.twitch.tv/oauth2/authorize?${p}`;
 }
 
