@@ -47,6 +47,12 @@
         .ov-dd-cat    { color: rgba(255,255,255,0.6); font-size: 1.6rem; font-weight: 700; text-transform: uppercase; margin-top: 18px; }
         .ov-dd-player { color: #fff; font-size: 2.2rem; font-weight: 900; margin-top: 10px; }
         .ov-dd-prompt { color: var(--yellow); font-size: 1.4rem; font-weight: 600; margin-top: 20px; opacity: 0.8; }
+        .ov-dd-timer  { margin-top: 28px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .ov-dd-timer-bar-wrap { width: 260px; height: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden; }
+        .ov-dd-timer-bar { height: 100%; border-radius: 4px; background: var(--yellow); transition: width 0.9s linear, background 0.3s; }
+        .ov-dd-timer-num { color: var(--yellow); font-size: 2rem; font-weight: 900; }
+        .ov-dd-timer-num.warn   { color: #ffaa44; }
+        .ov-dd-timer-num.urgent { color: #ff4444; }
 
         /* ── Answer Reveal Overlay ── */
         #answer-overlay { position: absolute; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--green); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 11; }
@@ -103,6 +109,10 @@
             <div class="ov-dd-cat" id="ov-dd-cat"></div>
             <div class="ov-dd-player" id="ov-dd-player"></div>
             <div class="ov-dd-prompt">Waiting for wager...</div>
+            <div class="ov-dd-timer" id="ov-dd-timer" style="display:none">
+                <div class="ov-dd-timer-bar-wrap"><div class="ov-dd-timer-bar" id="ov-dd-timer-bar"></div></div>
+                <div class="ov-dd-timer-num" id="ov-dd-timer-num">60</div>
+            </div>
         </div>
         <div id="clue-overlay">
             <div class="ov-cat" id="ov-cat"></div>
@@ -137,12 +147,23 @@ let pvTimerHandle    = null;
 let pvTimerRemaining = 0;
 let pvActiveTileId   = null;
 
+// ── DD WAGER TIMER STATE ──────────────────────────────────────────────────────
+let pvDDWagerTimeout   = 60;  // synced from hostSettings
+let pvDDWagerHandle    = null;
+let pvDDWagerRemaining = 0;
+
 // ── SETTINGS LISTENER (reads timer config pushed by host dashboard) ─────────
 db.ref('settings').on('value', snap => {
     const s = snap.val();
     if (!s) return;
     pvTimerEnabled = !!s.timerEnabled;
     pvTimerSeconds = Math.min(30, Math.max(5, s.timerSeconds || 20));
+});
+
+// Sync DD wager timeout from hostSettings
+db.ref('boardState/hostSettings/ddWagerTimeout').on('value', snap => {
+    const v = snap.val();
+    if (v != null) pvDDWagerTimeout = Math.max(5, parseInt(v, 10) || 60);
 });
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
@@ -251,7 +272,9 @@ db.ref('activeClue').on('value', snap => {
         document.getElementById('ov-dd-cat').innerText    = clue.category || '';
         document.getElementById('ov-dd-player').innerText = clue.ddPlayer ? `@${clue.ddPlayer}` : '';
         pvActiveTileId = null;
+        startDDWagerTimer();
     } else if (clue?.status === 'active' || clue?.status === 'daily-double-active') {
+        clearDDWagerTimer();
         ddOverlay.classList.remove('active');
         answerOverlay.classList.remove('active');
         const valLabel = (clue.status === 'daily-double-active' && clue.ddWager)
@@ -275,6 +298,7 @@ db.ref('activeClue').on('value', snap => {
         document.getElementById('ov-ar-answer').innerText = clue.answer || '';
         answerOverlay.classList.add('active');
     } else {
+        clearDDWagerTimer();
         ddOverlay.classList.remove('active');
         overlay.classList.remove('active');
         answerOverlay.classList.remove('active');
@@ -282,6 +306,39 @@ db.ref('activeClue').on('value', snap => {
         clearPreviewTimer();
     }
 });
+
+// ── DD WAGER TIMER FUNCTIONS ─────────────────────────────────────────────────
+function startDDWagerTimer() {
+    clearDDWagerTimer();
+    pvDDWagerRemaining = pvDDWagerTimeout;
+    document.getElementById('ov-dd-timer').style.display = '';
+    updateDDWagerTimerDisplay();
+    pvDDWagerHandle = setInterval(() => {
+        pvDDWagerRemaining--;
+        updateDDWagerTimerDisplay();
+        if (pvDDWagerRemaining <= 0) clearDDWagerTimer();
+    }, 1000);
+}
+
+function clearDDWagerTimer() {
+    if (pvDDWagerHandle) { clearInterval(pvDDWagerHandle); pvDDWagerHandle = null; }
+    const el = document.getElementById('ov-dd-timer');
+    if (el) el.style.display = 'none';
+}
+
+function updateDDWagerTimerDisplay() {
+    const num = document.getElementById('ov-dd-timer-num');
+    const bar = document.getElementById('ov-dd-timer-bar');
+    const pct = pvDDWagerRemaining / pvDDWagerTimeout;
+    if (num) {
+        num.textContent = pvDDWagerRemaining;
+        num.className = 'ov-dd-timer-num' + (pct <= 0.25 ? ' urgent' : pct <= 0.5 ? ' warn' : '');
+    }
+    if (bar) {
+        bar.style.width      = (pct * 100) + '%';
+        bar.style.background = pct > 0.5 ? 'var(--yellow)' : pct > 0.25 ? '#ffaa44' : '#ff4444';
+    }
+}
 
 // ── PREVIEW TIMER FUNCTIONS ────────────────────────────────────────────────────────
 function startPreviewTimer() {
