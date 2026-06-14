@@ -193,6 +193,37 @@
     </div>
 </div>
 
+<!-- ── Settings Modal ── -->
+<div class="modal" id="settings-modal">
+    <div class="mbox">
+        <h3>⚙️ Settings</h3>
+        <div id="stg-clue-warn" class="cfg-warning" style="display:none">⏸️ A clue is active — timer settings will apply to the next clue.</div>
+
+        <div class="cfg-section">
+            <div class="cfg-section-title">Countdown Timer</div>
+            <div class="cfg-row">
+                <div class="cfg-row-main">
+                    <input type="checkbox" id="stg-timer-on" onchange="document.getElementById('stg-timer-opts').style.display=this.checked?'flex':'none'">
+                    <label for="stg-timer-on">Enable countdown timer per clue</label>
+                </div>
+                <span class="tip" data-tip="When enabled, a timer starts each time a clue is opened. The clue auto-dismisses when it reaches zero.">?</span>
+            </div>
+            <div id="stg-timer-opts" class="cfg-sub-row" style="display:none;">
+                <label for="stg-timer-secs">Seconds per clue</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="number" id="stg-timer-secs" min="5" max="30" value="20">
+                    <span style="font-size:0.78rem;color:var(--dim);">5 – 30</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mrow">
+            <button class="btn-sec" onclick="closeModal('settings-modal')">Cancel</button>
+            <button onclick="applySettings()">Apply</button>
+        </div>
+    </div>
+</div>
+
 <!-- ── Reset / Settings Modal ── -->
 <div class="modal" id="reset-modal">
     <div class="mbox">
@@ -236,6 +267,7 @@
         <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v2</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
+        <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
         <button class="btn-red btn-sm" onclick="resetGame()">♻️ Reset</button>
     </div>
 
@@ -1241,6 +1273,29 @@ function resetGame() {
     document.getElementById('cfg-timer-secs').value         = timerSeconds;
     document.getElementById('cfg-timer-opts').style.display = timerEnabled ? '' : 'none';
     openModal('reset-modal');
+}
+
+function openSettings() {
+    // Populate with current values
+    document.getElementById('stg-timer-on').checked         = timerEnabled;
+    document.getElementById('stg-timer-secs').value         = timerSeconds;
+    document.getElementById('stg-timer-opts').style.display = timerEnabled ? '' : 'none';
+    // Disable timer inputs if a clue is currently active
+    const clueActive = activeClue && (activeClue.status === 'active' || activeClue.status === 'answer-reveal');
+    document.getElementById('stg-clue-warn').style.display  = clueActive ? '' : 'none';
+    document.getElementById('stg-timer-on').disabled        = clueActive;
+    document.getElementById('stg-timer-secs').disabled      = clueActive;
+    openModal('settings-modal');
+}
+
+function applySettings() {
+    timerEnabled = document.getElementById('stg-timer-on').checked;
+    timerSeconds = Math.min(30, Math.max(5, parseInt(document.getElementById('stg-timer-secs').value, 10) || 20));
+    localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
+    localStorage.setItem('cfg_timer_secs', String(timerSeconds));
+    db.ref('settings').update({ timerEnabled, timerSeconds });
+    closeModal('settings-modal');
+    log(`Settings saved. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}.`);
 }
 
 function confirmReset() {
