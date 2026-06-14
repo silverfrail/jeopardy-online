@@ -193,6 +193,19 @@
     </div>
 </div>
 
+<!-- ── Upload Board Confirmation Modal ── -->
+<div class="modal" id="upload-modal">
+    <div class="mbox">
+        <h3>📋 Upload New Board</h3>
+        <div style="font-size:0.88rem;color:var(--dim);margin-bottom:16px;">The new board is ready to load. What would you like to do with the current scores?</div>
+        <div class="mrow" style="flex-direction:column;gap:10px;">
+            <button class="btn-ok" style="width:100%" onclick="commitUpload(false)">Keep Scores &amp; Upload</button>
+            <button class="btn-red" style="width:100%" onclick="commitUpload(true)">Reset Scores &amp; Upload</button>
+            <button class="btn-sec" style="width:100%" onclick="closeModal('upload-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <!-- ── Settings Modal ── -->
 <div class="modal" id="settings-modal">
     <div class="mbox">
@@ -264,7 +277,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v6</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v7</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -1279,6 +1292,9 @@ function initListeners() {
 }
 
 // ── GAME MANAGEMENT ───────────────────────────────────────────────────────────
+let pendingUploadTiles = null;
+let pendingUploadCategories = null;
+
 function uploadBoard() {
     try {
         const input = JSON.parse(document.getElementById('json-in').value);
@@ -1293,9 +1309,25 @@ function uploadBoard() {
                 });
             });
         });
-        db.ref('boardState').set({ categories: board.map(c => c.category), tiles });
-        log('Board uploaded successfully.');
+        // Valid — stash and ask about scores
+        pendingUploadTiles      = tiles;
+        pendingUploadCategories = board.map(c => c.category);
+        openModal('upload-modal');
     } catch (e) { alert('Invalid JSON: ' + e.message); }
+}
+
+function commitUpload(resetScores) {
+    if (!pendingUploadTiles) return;
+    db.ref('boardState').set({ categories: pendingUploadCategories, tiles: pendingUploadTiles });
+    if (resetScores) {
+        db.ref('leaderboard').set({});
+        log('Board uploaded. Scores reset.');
+    } else {
+        log('Board uploaded. Scores kept.');
+    }
+    pendingUploadTiles      = null;
+    pendingUploadCategories = null;
+    closeModal('upload-modal');
 }
 
 function generatePrompt() {
