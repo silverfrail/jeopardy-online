@@ -86,11 +86,25 @@
         .bt.played { opacity: 0.12; pointer-events: none; }
         .bt.active { border-color: #ffff5c; box-shadow: 0 0 6px rgba(255,255,92,0.35); }
 
+        /* ── Panel Collapse ── */
+        .panel-toggle { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 0.85rem; padding: 0 2px; line-height: 1; flex-shrink: 0; }
+        .panel-toggle:hover { color: var(--text); filter: none; }
+        .panel.collapsed > *:not(.ptitle),
+        .log-panel.collapsed > *:not(.ptitle) { display: none !important; }
+
         /* ── Players / Roster ── */
         .p-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
         .p-item:last-child { border-bottom: none; }
         .p-score { color: var(--green); font-weight: 700; }
         .p-adj { display: flex; gap: 4px; }
+
+        /* ── Category Suggestions ── */
+        .cat-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .cat-item:last-child { border-bottom: none; }
+        .cat-name { font-size: 0.85rem; font-weight: 700; color: #fff; }
+        .cat-user { font-size: 0.72rem; color: var(--dim); margin-top: 1px; }
+        .cat-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.85rem; padding: 0 4px; line-height: 1; flex-shrink: 0; }
+        .cat-remove:hover { filter: brightness(1.4); }
 
         /* ── Buttons ── */
         button { background: var(--blue); color: #fff; border: none; padding: 8px 14px; font-weight: 700; border-radius: 4px; cursor: pointer; font-size: 0.82rem; }
@@ -301,7 +315,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v14</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v15</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -389,7 +403,7 @@
 
             <!-- Twitch -->
             <div class="panel">
-                <div class="ptitle">Twitch</div>
+                <div class="ptitle">Twitch <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button></div>
 
                 <!-- Chat host role indicator -->
                 <div class="chat-role-row">
@@ -421,16 +435,28 @@
 
             <!-- Scoreboard -->
             <div class="panel">
-                <div class="ptitle">Scoreboard</div>
+                <div class="ptitle">Scoreboard <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button></div>
                 <div id="roster"><div style="color:var(--dim);font-size:0.82rem;">No players yet.</div></div>
+            </div>
+
+            <!-- Category Suggestions -->
+            <div class="panel">
+                <div class="ptitle">Category Suggestions
+                    <div style="display:flex;gap:5px;align-items:center;">
+                        <button class="btn-red btn-sm" onclick="clearAllCategories()">Clear All</button>
+                        <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
+                    </div>
+                </div>
+                <div id="cat-suggestions"><div style="color:var(--dim);font-size:0.82rem;">No suggestions yet. Viewers type !cat [name] in chat.</div></div>
             </div>
 
             <!-- Game Management -->
             <div class="panel">
                 <div class="ptitle">Game Management
-                    <div style="display:flex;gap:5px;">
+                    <div style="display:flex;gap:5px;align-items:center;">
                         <button class="btn-sec btn-sm" onclick="document.getElementById('file-in').click()">Import</button>
                         <button class="btn-sec btn-sm" onclick="exportFile()">Export</button>
+                        <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
                     </div>
                 </div>
                 <textarea id="json-in" rows="7" placeholder="Paste AI-generated JSON here..."></textarea>
@@ -442,7 +468,7 @@
 
             <!-- Audit Log Panel -->
             <div class="log-panel">
-                <div class="ptitle">Activity Log!</div>
+                <div class="ptitle">Activity Log! <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button></div>
                 <div id="syslog"></div>
             </div>
 
@@ -500,6 +526,7 @@ let isChatPrimary   = false;  // true only for the dashboard that owns chat proc
 const chatPrimaryRef = db.ref('boardState/hostSettings/chatPrimary'); // Firebase node for chat primary election
 
 // ── DAILY DOUBLE STATE ────────────────────────────────────────────────────────
+let categorySubmissions = {};    // pushKey → { category, username }
 let ddEnabled           = false;
 let ddCount             = 1;
 let ddWagerTimeout      = 60;    // seconds to wait for !wager before skip
@@ -532,6 +559,15 @@ function randomStr(len) {
     crypto.getRandomValues(buf);
     return Array.from(buf, b => chars[b % chars.length]).join('');
 }
+function escapeHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function togglePanel(btn) {
+    const panel = btn.closest('.panel, .log-panel');
+    const collapsed = panel.classList.toggle('collapsed');
+    btn.textContent = collapsed ? '▸' : '▾';
+    btn.title = collapsed ? 'Expand' : 'Collapse';
+}
 
 // ── FIREBASE AUTH ─────────────────────────────────────────────────────────────
 function initDashboard() {
@@ -540,10 +576,11 @@ function initDashboard() {
     document.getElementById('fb-dot').classList.add('on');
     log('Dashboard initialized.');
     initListeners();
-    listenChatPrimary();     // claim or observe chat-primary role
-    listenFollowersOnly();   // sync followers-only setting across dashboards
-    listenTimerSettings();   // sync timer settings across dashboards
-    listenPendingGuess();    // sync pending guess panel across dashboards
+    listenChatPrimary();           // claim or observe chat-primary role
+    listenFollowersOnly();         // sync followers-only setting across dashboards
+    listenTimerSettings();         // sync timer settings across dashboards
+    listenPendingGuess();          // sync pending guess panel across dashboards
+    listenCategorySubmissions();   // sync viewer category suggestions
     initTMI();  // always listen to chat, regardless of OAuth state
     oauthReady.then(() => checkTwitchSession());
     // Release chat-primary lock when this tab closes
@@ -800,6 +837,40 @@ function listenTimerSettings() {
     });
 }
 
+// ── CATEGORY SUGGESTIONS ────────────────────────────────────────────────────
+function listenCategorySubmissions() {
+    db.ref('boardState/categorySubmissions').on('value', snap => {
+        categorySubmissions = snap.val() || {};
+        renderCategorySubmissions();
+    });
+}
+
+function renderCategorySubmissions() {
+    const el      = document.getElementById('cat-suggestions');
+    const entries = Object.entries(categorySubmissions);
+    if (!entries.length) {
+        el.innerHTML = '<div style="color:var(--dim);font-size:0.82rem;">No suggestions yet. Viewers type !cat [name] in chat.</div>';
+        return;
+    }
+    el.innerHTML = entries.map(([key, val]) =>
+        `<div class="cat-item">
+            <div>
+                <div class="cat-name">${escapeHtml(val.category)}</div>
+                <div class="cat-user">@${escapeHtml(val.username)}</div>
+            </div>
+            <button class="cat-remove" onclick="removeCategorySubmission('${key}')" title="Remove">✕</button>
+        </div>`
+    ).join('');
+}
+
+function removeCategorySubmission(key) {
+    db.ref(`boardState/categorySubmissions/${key}`).remove();
+}
+
+function clearAllCategories() {
+    db.ref('boardState/categorySubmissions').set(null);
+}
+
 // ── MULTI-HOST: Shared Pending Guess ─────────────────────────────────────────
 function listenPendingGuess() {
     db.ref('boardState/hostSettings/pendingGuess').on('value', snap => {
@@ -929,6 +1000,19 @@ async function onChat(channel, tags, message) {
     if (!isChatPrimary) return; // helper dashboards ignore incoming guesses entirely
     const msg      = message.trim();
     const username = tags['display-name'] || tags['username'] || '';
+
+    // ── Handle !cat category suggestion ─────────────────────────────────────
+    if (msg.toLowerCase().startsWith('!cat')) {
+        const catText = msg.slice(4).trim();
+        if (catText) {
+            const catLower = catText.toLowerCase();
+            const exists = Object.values(categorySubmissions).some(v => v.category.toLowerCase() === catLower);
+            if (!exists) {
+                db.ref('boardState/categorySubmissions').push({ category: catText, username });
+            }
+        }
+        return;
+    }
 
     // ── Handle !wager for Daily Double ───────────────────────────────────────
     if (msg.toLowerCase().startsWith('!wager') && activeClue?.status === 'daily-double') {
