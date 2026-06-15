@@ -334,7 +334,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v20</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v21</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -421,7 +421,7 @@
         <div class="sidebar">
 
             <!-- Twitch -->
-            <div class="panel" data-panel-id="twitch" draggable="true">
+            <div class="panel" data-panel-id="twitch">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Twitch <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button></div>
 
                 <!-- Chat host role indicator -->
@@ -453,13 +453,13 @@
             </div>
 
             <!-- Scoreboard -->
-            <div class="panel collapsed" data-panel-id="scoreboard" draggable="true">
+            <div class="panel collapsed" data-panel-id="scoreboard">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Scoreboard <button class="panel-toggle" onclick="togglePanel(this)" title="Expand">▸</button></div>
                 <div id="roster"><div style="color:var(--dim);font-size:0.82rem;">No players yet.</div></div>
             </div>
 
             <!-- Category Suggestions -->
-            <div class="panel collapsed" data-panel-id="categories" draggable="true">
+            <div class="panel collapsed" data-panel-id="categories">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Category Suggestions
                     <div style="display:flex;gap:5px;align-items:center;">
                         <button class="btn-red btn-sm" onclick="clearAllCategories()">Clear All</button>
@@ -470,7 +470,7 @@
             </div>
 
             <!-- Game Management -->
-            <div class="panel collapsed" data-panel-id="game-management" draggable="true">
+            <div class="panel collapsed" data-panel-id="game-management">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Game Management
                     <div style="display:flex;gap:5px;align-items:center;">
                         <button class="btn-sec btn-sm" onclick="document.getElementById('file-in').click()">Import</button>
@@ -486,13 +486,13 @@
             </div>
 
             <!-- Audit Log Panel -->
-            <div class="log-panel collapsed" data-panel-id="activity-log" draggable="true">
+            <div class="log-panel collapsed" data-panel-id="activity-log">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Activity Log! <button class="panel-toggle" onclick="togglePanel(this)" title="Expand">▸</button></div>
                 <div id="syslog"></div>
             </div>
 
             <!-- Host Chat -->
-            <div class="panel collapsed" id="host-chat-panel" data-panel-id="host-chat" draggable="true">
+            <div class="panel collapsed" id="host-chat-panel" data-panel-id="host-chat">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Host Chat
                     <div style="display:flex;gap:5px;align-items:center;">
                         <button class="btn-red btn-sm" onclick="clearHostChat()">Clear</button>
@@ -629,10 +629,20 @@ function initPanelDrag() {
         });
     }
 
+    // Enable dragging only when mousedown originates on a grip handle
+    sidebar.addEventListener('mousedown', e => {
+        if (e.target.classList.contains('panel-grip')) {
+            const panel = e.target.closest('[data-panel-id]');
+            if (panel) panel.setAttribute('draggable', 'true');
+        }
+    });
+    document.addEventListener('mouseup', () => {
+        sidebar.querySelectorAll('[data-panel-id]').forEach(el => el.removeAttribute('draggable'));
+    });
+
     sidebar.addEventListener('dragstart', e => {
         const panel = e.target.closest('[data-panel-id]');
         if (!panel) return;
-        if (!e.target.classList.contains('panel-grip')) { e.preventDefault(); return; }
         dragSrc = panel;
         panel.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
