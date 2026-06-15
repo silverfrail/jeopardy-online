@@ -89,8 +89,20 @@
         /* ── Panel Collapse ── */
         .panel-toggle { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 0.85rem; padding: 0 2px; line-height: 1; flex-shrink: 0; }
         .panel-toggle:hover { color: var(--text); filter: none; }
+        .panel-toggle-wrap { position: relative; display: inline-flex; align-items: center; }
+        .panel-unread { position: absolute; top: -4px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); display: none; pointer-events: none; }
         .panel.collapsed > *:not(.ptitle),
         .log-panel.collapsed > *:not(.ptitle) { display: none !important; }
+
+        /* ── Host Chat ── */
+        #host-chat-msgs { height: 160px; overflow-y: auto; margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+        .hc-msg { font-size: 0.8rem; line-height: 1.4; }
+        .hc-meta { display: flex; align-items: baseline; gap: 5px; margin-bottom: 1px; }
+        .hc-name { font-weight: 700; font-size: 0.78rem; }
+        .hc-time { font-size: 0.68rem; color: var(--dim); }
+        .hc-text { color: rgba(255,255,255,0.88); word-break: break-word; }
+        .hc-input-row { display: flex; gap: 6px; }
+        .hc-input-row input { flex: 1; }
 
         /* ── Players / Roster ── */
         .p-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
@@ -175,6 +187,7 @@
 <div id="auth-overlay">
     <div class="auth-box">
         <h2>Host Dashboard</h2>
+        <input type="text"     id="host-name-in" placeholder="Your name (e.g. Joshua)..." style="margin-bottom:8px;" onkeydown="if(event.key==='Enter')document.getElementById('pass-in').focus()">
         <input type="password" id="pass-in" placeholder="Password..." onkeydown="if(event.key==='Enter')unlock()">
         <button onclick="unlock()" style="width:100%;padding:10px;">Unlock</button>
         <div class="auth-err" id="auth-err"></div>
@@ -315,7 +328,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v15</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v16</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -472,6 +485,24 @@
                 <div id="syslog"></div>
             </div>
 
+            <!-- Host Chat -->
+            <div class="panel" id="host-chat-panel">
+                <div class="ptitle">Host Chat
+                    <div style="display:flex;gap:5px;align-items:center;">
+                        <button class="btn-red btn-sm" onclick="clearHostChat()">Clear</button>
+                        <span class="panel-toggle-wrap">
+                            <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
+                            <span class="panel-unread" id="host-chat-unread"></span>
+                        </span>
+                    </div>
+                </div>
+                <div id="host-chat-msgs"><div style="color:var(--dim);font-size:0.82rem;">No messages yet.</div></div>
+                <div class="hc-input-row">
+                    <input type="text" id="host-chat-in" placeholder="Message..." maxlength="300" onkeydown="if(event.key==='Enter')sendHostChat()">
+                    <button class="btn-sec btn-sm" onclick="sendHostChat()">Send</button>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -527,6 +558,7 @@ const chatPrimaryRef = db.ref('boardState/hostSettings/chatPrimary'); // Firebas
 
 // ── DAILY DOUBLE STATE ────────────────────────────────────────────────────────
 let categorySubmissions = {};    // pushKey → { category, username }
+let hostName            = sessionStorage.getItem('dashboard_host_name') || 'Host';
 let ddEnabled           = false;
 let ddCount             = 1;
 let ddWagerTimeout      = 60;    // seconds to wait for !wager before skip
@@ -567,6 +599,93 @@ function togglePanel(btn) {
     const collapsed = panel.classList.toggle('collapsed');
     btn.textContent = collapsed ? '▸' : '▾';
     btn.title = collapsed ? 'Expand' : 'Collapse';
+    // Clear unread badge when expanding host chat
+    if (!collapsed && panel.id === 'host-chat-panel') {
+        document.getElementById('host-chat-unread').style.display = 'none';
+    }
+}
+
+// ── HOST CHAT ────────────────────────────────────────────────────────────────
+const HOST_COLORS = ['#7ecfff','#a8ff78','#ffb86c','#ff79c6','#bd93f9','#50fa7b'];
+function hostColor(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return HOST_COLORS[h % HOST_COLORS.length];
+}
+
+function listenHostChat() {
+    // value listener handles clear (null) and initial load for all dashboards
+    let initialLoad = true;
+    db.ref('boardState/hostChat').on('value', snap => {
+        const msgs = snap.val();
+        const container = document.getElementById('host-chat-msgs');
+        if (!msgs) {
+            container.innerHTML = '<div style="color:var(--dim);font-size:0.82rem;">No messages yet.</div>';
+            initialLoad = false;
+            return;
+        }
+        if (initialLoad) {
+            container.innerHTML = '';
+            Object.values(msgs).forEach(msg => appendHostChatMessage(msg, msg.sessionId === SESSION_ID));
+            initialLoad = false;
+        }
+    });
+    // child_added handles live new messages + unread badge after initial load
+    db.ref('boardState/hostChat').on('child_added', snap => {
+        if (initialLoad) return; // skip — value listener handles initial load
+        const msg = snap.val();
+        if (!msg) return;
+        const isOwnSession = msg.sessionId === SESSION_ID;
+        appendHostChatMessage(msg, isOwnSession);
+        if (!isOwnSession) {
+            const panel = document.getElementById('host-chat-panel');
+            if (panel.classList.contains('collapsed')) {
+                document.getElementById('host-chat-unread').style.display = 'block';
+            }
+        }
+    });
+}
+
+function appendHostChatMessage(msg, isOwn) {
+    const container = document.getElementById('host-chat-msgs');
+    // Remove empty-state placeholder
+    const placeholder = container.querySelector('div[style]');
+    if (placeholder) placeholder.remove();
+
+    const ts   = msg.timestamp ? new Date(msg.timestamp) : new Date();
+    const date = ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const color = hostColor(msg.name || 'Host');
+
+    const el = document.createElement('div');
+    el.className = 'hc-msg';
+    el.innerHTML =
+        `<div class="hc-meta">
+            <span class="hc-name" style="color:${color}">${escapeHtml(msg.name || 'Host')}</span>
+            <span class="hc-time">${date} ${time}</span>
+        </div>
+        <div class="hc-text">${escapeHtml(msg.text)}</div>`;
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+}
+
+function sendHostChat() {
+    const input = document.getElementById('host-chat-in');
+    const text  = input.value.trim();
+    if (!text) return;
+    db.ref('boardState/hostChat').push({
+        name:      hostName,
+        text,
+        timestamp: Date.now(),
+        sessionId: SESSION_ID
+    });
+    input.value = '';
+}
+
+function clearHostChat() {
+    db.ref('boardState/hostChat').set(null);
+    const container = document.getElementById('host-chat-msgs');
+    container.innerHTML = '<div style="color:var(--dim);font-size:0.82rem;">No messages yet.</div>';
 }
 
 // ── FIREBASE AUTH ─────────────────────────────────────────────────────────────
@@ -581,6 +700,7 @@ function initDashboard() {
     listenTimerSettings();         // sync timer settings across dashboards
     listenPendingGuess();          // sync pending guess panel across dashboards
     listenCategorySubmissions();   // sync viewer category suggestions
+    listenHostChat();               // sync host-to-host chat
     initTMI();  // always listen to chat, regardless of OAuth state
     oauthReady.then(() => checkTwitchSession());
     // Release chat-primary lock when this tab closes
@@ -588,9 +708,11 @@ function initDashboard() {
 }
 
 function unlock() {
-    const key = document.getElementById('pass-in').value;
+    const nameVal = document.getElementById('host-name-in').value.trim();
+    const key     = document.getElementById('pass-in').value;
     db.ref('authValidation/secretKey').once('value').then(snap => {
         if (snap.val() === key) {
+            if (nameVal) { hostName = nameVal; sessionStorage.setItem('dashboard_host_name', nameVal); }
             sessionStorage.setItem('dashboard_unlocked', '1');
             initDashboard();
         } else {
