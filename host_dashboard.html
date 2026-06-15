@@ -328,7 +328,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v16</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v17</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -614,34 +614,30 @@ function hostColor(name) {
 }
 
 function listenHostChat() {
-    // value listener handles clear (null) and initial load for all dashboards
-    let initialLoad = true;
-    db.ref('boardState/hostChat').on('value', snap => {
-        const msgs = snap.val();
-        const container = document.getElementById('host-chat-msgs');
-        if (!msgs) {
-            container.innerHTML = '<div style="color:var(--dim);font-size:0.82rem;">No messages yet.</div>';
-            initialLoad = false;
-            return;
-        }
-        if (initialLoad) {
-            container.innerHTML = '';
-            Object.values(msgs).forEach(msg => appendHostChatMessage(msg, msg.sessionId === SESSION_ID));
-            initialLoad = false;
-        }
-    });
-    // child_added handles live new messages + unread badge after initial load
+    // once('value') fires after all existing child_added events — marks initial load complete
+    let ready = false;
+    db.ref('boardState/hostChat').once('value', () => { ready = true; });
+
+    // child_added handles ALL rendering (both initial load and new messages)
     db.ref('boardState/hostChat').on('child_added', snap => {
-        if (initialLoad) return; // skip — value listener handles initial load
         const msg = snap.val();
         if (!msg) return;
         const isOwnSession = msg.sessionId === SESSION_ID;
         appendHostChatMessage(msg, isOwnSession);
-        if (!isOwnSession) {
+        // Only show unread badge for messages that arrive after initial load
+        if (ready && !isOwnSession) {
             const panel = document.getElementById('host-chat-panel');
             if (panel.classList.contains('collapsed')) {
                 document.getElementById('host-chat-unread').style.display = 'block';
             }
+        }
+    });
+
+    // value listener only handles clear (null) — does not render
+    db.ref('boardState/hostChat').on('value', snap => {
+        if (!snap.val()) {
+            document.getElementById('host-chat-msgs').innerHTML =
+                '<div style="color:var(--dim);font-size:0.82rem;">No messages yet.</div>';
         }
     });
 }
@@ -684,8 +680,7 @@ function sendHostChat() {
 
 function clearHostChat() {
     db.ref('boardState/hostChat').set(null);
-    const container = document.getElementById('host-chat-msgs');
-    container.innerHTML = '<div style="color:var(--dim);font-size:0.82rem;">No messages yet.</div>';
+    // UI reset handled by the value listener
 }
 
 // ── FIREBASE AUTH ─────────────────────────────────────────────────────────────
