@@ -362,7 +362,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v30</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v31</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -396,7 +396,6 @@
                     <div class="ac-q"   id="ac-q"></div>
                     <div class="ac-albl" id="ac-albl">Correct Answer</div>
                     <div class="ac-ans" id="ac-ans"></div>
-                    <div id="ac-scorer" style="display:none;font-size:0.78rem;margin-top:6px;color:var(--dim);"><span id="ac-scorer-label">Answered correctly by</span> <strong id="ac-scorer-name" style="color:var(--green);"></strong></div>
 
                     <!-- Countdown Timer -->
                     <div id="ac-timer" style="display:none;">
@@ -1453,33 +1452,10 @@ function setClueUI(clue) {
 
     if (clue.status === 'answer-reveal') {
         document.getElementById('ac-cat').innerText  = clue.category || '';
-        // DD review: show wager + result instead of the tile's base value
-        if (clue.ddReview) {
-            const { ddUsername, ddWager, ddCorrect } = clue.ddReview;
-            const resultLabel = ddCorrect ? '✓ Correct' : '✗ Wrong';
-            const resultColor = ddCorrect ? 'var(--green)' : '#ff5555';
-            const wagerLabel  = ddWager ? `⭐ DD — Wager: $${Number(ddWager).toLocaleString()}` : '⭐ Daily Double';
-            document.getElementById('ac-val').innerHTML = `<span style="color:var(--yellow);">${wagerLabel}</span> &nbsp;<span style="color:${resultColor};font-size:1rem;font-weight:800;">${resultLabel}</span>`;
-        } else {
-            document.getElementById('ac-val').innerText = `$${clue.value}`;
-        }
+        document.getElementById('ac-val').innerText  = `$${clue.value}`;
         document.getElementById('ac-q').innerText    = clue.question || '';
         document.getElementById('ac-albl').innerText = 'The answer was';
         document.getElementById('ac-ans').innerText  = clue.answer || '—';
-        const acScorer = document.getElementById('ac-scorer');
-        const scorerName = clue.ddReview ? clue.ddReview.ddUsername : clue.correctAnswerer;
-        const scorerLabel = clue.ddReview
-            ? (clue.ddReview.ddCorrect ? 'Answered correctly by' : 'Wagered by')
-            : 'Answered correctly by';
-        if (scorerName) {
-            document.getElementById('ac-scorer-label').innerText = scorerLabel;
-            const nameEl = document.getElementById('ac-scorer-name');
-            nameEl.innerText = scorerName;
-            nameEl.style.color = (clue.ddReview && !clue.ddReview.ddCorrect) ? '#ff5555' : 'var(--green)';
-            acScorer.style.display = 'block';
-        } else {
-            acScorer.style.display = 'none';
-        }
         if (pgPanel)    pgPanel.style.display   = 'none';
         if (arDismiss)  arDismiss.style.display  = 'block';
         if (dismissBtn) dismissBtn.style.display = 'none';
@@ -1488,7 +1464,6 @@ function setClueUI(clue) {
 
     // active or daily-double-active — restore labels and show normal controls
     document.getElementById('ac-albl').innerText = 'Correct Answer';
-    document.getElementById('ac-scorer').style.display = 'none';
     document.getElementById('ac-cat').innerText  = clue.category || '';
     const valLabel = (clue.status === 'daily-double-active' && clue.ddWager)
         ? `$${clue.value} · Wager: $${clue.ddWager}`
@@ -1542,11 +1517,17 @@ function updateQueueIndicator() {
 }
 
 // ── CLUE TIMER ────────────────────────────────────────────────────────────────
-function startClueTimer() {
+function startClueTimer(elapsedSecs) {
     if (!timerEnabled) return;
     clearClueTimer();
     timerExpired   = false;
-    timerRemaining = timerSeconds;
+    timerRemaining = Math.max(0, timerSeconds - Math.floor(elapsedSecs || 0));
+    if (timerRemaining <= 0) {
+        timerExpired = true;
+        log('⏱ Timer already expired (page loaded mid-clue).');
+        dismissClue('timer');
+        return;
+    }
     document.getElementById('ac-timer').style.display = '';
     updateTimerDisplay();
     timerHandle = setInterval(() => {
@@ -1741,7 +1722,8 @@ function processDDWager(username, amtStr) {
         question: activeClue.question, answer: activeClue.answer || '',
         ddPlayer: activeClue.ddPlayer, ddWager: amt,
         ddWagerTimeout: activeClue.ddWagerTimeout,
-        timerEnabled, timerSeconds
+        timerEnabled, timerSeconds,
+        clueStartedAt: Date.now()
     });
     sendChatMessage(`@${username} Wager of $${amt} locked in! Answer with !guess.`);
 }
@@ -1755,7 +1737,8 @@ function forceDDSkip() {
         tileId: activeClue.tileId,
         value: activeClue.value, category: activeClue.category,
         question: activeClue.question, answer: activeClue.answer || '',
-        timerEnabled, timerSeconds
+        timerEnabled, timerSeconds,
+        clueStartedAt: Date.now()
     });
 }
 
@@ -1824,7 +1807,8 @@ function renderBoard() {
                         db.ref('activeClue').set({
                             status: 'active', tileId: tile.id,
                             value: tile.value, category: tile.category, question: tile.question,
-                            timerEnabled, timerSeconds
+                            timerEnabled, timerSeconds,
+                            clueStartedAt: Date.now()
                         });
                     }
                 };
@@ -1858,7 +1842,8 @@ function initListeners() {
                 lastActiveTileId = data.tileId;
                 lastClueStatus   = data.status;
                 clueScorers = [];
-                requestAnimationFrame(startClueTimer);
+                const elapsed = data.clueStartedAt ? (Date.now() - data.clueStartedAt) / 1000 : 0;
+                requestAnimationFrame(() => startClueTimer(elapsed));
             }
         } else if (data?.status === 'daily-double') {
             activeClue = data;
@@ -2157,30 +2142,14 @@ function applySettings() {
 
 
 function reviewClue(tile) {
-    db.ref(`boardState/tileResults/${tile.id}`).once('value').then(snap => {
-        const result  = snap.val();
-        const scorers = result?.scorers || [];
-        const correctScorer = scorers.find(s => s.delta > 0);
-        // For daily doubles, find the DD scorer (wager: true) — could be correct or wrong
-        const ddScorer = tile.dd ? scorers.find(s => s.wager) : null;
-        const payload = {
-            status:   'answer-reveal',
-            answer:   tile.answer   || '—',
-            category: tile.category || '',
-            value:    tile.value    || 0,
-            question: tile.question || '',
-            correctAnswerer: correctScorer && !ddScorer ? correctScorer.username : null
-        };
-        if (ddScorer) {
-            payload.ddReview = {
-                ddUsername: ddScorer.username,
-                ddWager:    Math.abs(ddScorer.delta) || result?.ddWager || 0,
-                ddCorrect:  ddScorer.delta > 0
-            };
-        }
-        db.ref('activeClue').set(payload);
-        log(`Reviewing: [${tile.category} $${tile.value}] ${tile.question}`);
+    db.ref('activeClue').set({
+        status: 'answer-reveal',
+        answer: tile.answer || '—',
+        category: tile.category || '',
+        value: tile.value || 0,
+        question: tile.question || ''
     });
+    log(`Reviewing: [${tile.category} $${tile.value}] ${tile.question}`);
 }
 
 function triggerOBSRefresh() {
