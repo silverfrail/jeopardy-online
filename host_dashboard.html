@@ -437,6 +437,12 @@
                     <span class="tip" data-tip="When checked, only viewers who follow your Twitch channel can submit guesses. Requires connecting your Twitch account below.">?</span>
                 </div>
 
+                <!-- Guess command -->
+                <div class="toggle-row" style="margin-bottom:10px;">
+                    <label for="guess-cmd" style="color:var(--dim);font-size:0.82rem;">Guess command</label>
+                    <input type="text" id="guess-cmd" style="width:80px;margin-left:auto;font-size:0.82rem;" placeholder="!guess" oninput="updateGuessCommand(this.value)">
+                </div>
+
                 <!-- Auth section — hidden when followers-only is off -->
                 <div id="tw-auth-section">
                     <div id="tw-connect">
@@ -777,6 +783,9 @@ function initDashboard() {
     initPanelDrag();                // sidebar drag-and-drop reordering
     initTMI();  // always listen to chat, regardless of OAuth state
     oauthReady.then(() => checkTwitchSession());
+    // Restore guess command input
+    const gcEl = document.getElementById('guess-cmd');
+    if (gcEl) gcEl.value = guessCommand;
     // Release chat-primary lock when this tab closes
     window.addEventListener('beforeunload', releaseChatPrimary);
 }
@@ -880,6 +889,12 @@ function clearTwitchSession() {
     twitchToken = null; broadcasterId = null; twitchLogin = null;
     userIdCache.clear();
     lastBotReplyAt.clear();
+}
+
+function updateGuessCommand(val) {
+    const cmd = val.trim() || '!guess';
+    guessCommand = cmd;
+    localStorage.setItem('cfg_guess_cmd', cmd);
 }
 
 function updateFollowersOnly() {
@@ -1218,9 +1233,9 @@ async function onChat(channel, tags, message) {
         return;
     }
 
-    if (!msg.toLowerCase().startsWith('!guess')) return;
+    if (!msg.toLowerCase().startsWith(guessCommand.toLowerCase())) return;
 
-    const guessText = msg.slice(6).trim();
+    const guessText = msg.slice(guessCommand.length).trim();
     if (!guessText) return;
     if (!activeClue || (activeClue.status !== 'active' && activeClue.status !== 'daily-double-active')) return;
 
@@ -1535,6 +1550,11 @@ function judgeGuess(correct) {
 }
 
 function dismissClue(reason) {
+    // DD timer expiry: player never guessed — deduct wager if DD penalties are on
+    if (reason === 'timer' && activeClue?.status === 'daily-double-active' && activeClue.ddWager && penaltyDD) {
+        adjustScore(activeClue.ddPlayer, -activeClue.ddWager);
+        log(`⏱ DD timer expired — ${activeClue.ddPlayer} never answered. -$${activeClue.ddWager}`);
+    }
     clearClueTimer();
     clearWagerTimer();
     timerExpired  = false;
