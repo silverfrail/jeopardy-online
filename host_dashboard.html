@@ -556,8 +556,9 @@ let tmiRetryDelay = 2000;       // exponential backoff delay for IRC reconnects 
 
 // ── SETTINGS (persisted across sessions) ─────────────────────────────────────
 let timerEnabled    = localStorage.getItem('cfg_timer_on')   === '1';
-let timerSeconds    = Math.min(30, Math.max(5, parseInt(localStorage.getItem('cfg_timer_secs') || '20', 10)));
-let timerHandle     = null;
+        let timerSeconds    = Math.min(30, Math.max(5, parseInt(localStorage.getItem('cfg_timer_secs') || '20', 10)));
+        let guessCommand    = localStorage.getItem('cfg_guess_cmd') || '!guess';
+        let timerHandle     = null;
 let timerRemaining  = 0;
 let timerExpired    = false;   // true after timer hits zero — blocks new guesses
 let lastActiveTileId = null;
