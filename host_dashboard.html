@@ -163,6 +163,7 @@
         .chat-badge.helper  { background: rgba(255,255,255,0.06); color: var(--dim); border: 1px solid var(--border); }
         .claim-btn { font-size: 0.72rem; padding: 3px 8px; background: rgba(90,90,180,0.18); border: 1px solid var(--border); color: var(--dim); border-radius: 5px; cursor: pointer; }
         .claim-btn:hover { background: rgba(90,90,180,0.35); color: var(--text); }
+        .tw-warn-banner { display:none; margin-top:8px; padding:8px 10px; background:rgba(255,170,0,0.12); border:1px solid rgba(255,170,0,0.4); border-radius:6px; font-size:0.76rem; color:#ffaa00; line-height:1.4; }
 
         /* ── Tooltip ── */
         .tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: #383858; color: var(--dim); font-size: 0.65rem; font-weight: 700; cursor: default; margin-left: 5px; flex-shrink: 0; }
@@ -362,7 +363,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v32</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v33</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -457,6 +458,7 @@
                     <span id="chat-badge" class="chat-badge helper">Helper</span>
                     <button id="claim-btn" class="claim-btn" onclick="claimChatPrimary()" style="display:none">Claim Primary</button>
                 </div>
+                <div id="tw-warn-banner" class="tw-warn-banner"></div>
 
                 <!-- Followers only toggle — always visible -->
                 <div class="toggle-row" style="margin-bottom:10px;">
@@ -880,12 +882,7 @@ async function checkTwitchSession() {
         headers: { 'Authorization': `OAuth ${twitchToken}` }
     });
     if (!res.ok) {
-        clearTwitchSession();
-        // Show a reconnect notice instead of silently going dark
-        document.getElementById('tw-connect').style.display   = '';
-        document.getElementById('tw-connected').style.display = 'none';
-        document.getElementById('tw-dot').classList.remove('on');
-        log('Twitch token expired — click Connect to re-authenticate.');
+        handleTwitchExpiry();
         return;
     }
     const data = await res.json();
@@ -893,10 +890,7 @@ async function checkTwitchSession() {
     const granted = new Set(data.scopes || []);
     const missing = requiredScopes.filter(s => !granted.has(s));
     if (missing.length) {
-        clearTwitchSession();
-        document.getElementById('tw-connect').style.display   = '';
-        document.getElementById('tw-connected').style.display = 'none';
-        document.getElementById('tw-dot').classList.remove('on');
+        handleTwitchExpiry();
         log(`Reconnect Twitch to enable chat replies (missing scopes: ${missing.join(', ')}).`);
         return;
     }
@@ -921,6 +915,7 @@ async function setupTwitch(loginName) {
     if (twitchLogin) localStorage.setItem('twitch_login', twitchLogin);
     // Reconnect IRC as authenticated so we can send chat replies when needed.
     initTMI();
+    updateChatBadge(); // clear any Twitch warning now that we're connected
     log('Twitch session active.');
 }
 
@@ -929,6 +924,15 @@ function clearTwitchSession() {
     twitchToken = null; broadcasterId = null; twitchLogin = null;
     userIdCache.clear();
     lastBotReplyAt.clear();
+}
+
+function handleTwitchExpiry() {
+    clearTwitchSession();
+    document.getElementById('tw-connect').style.display   = '';
+    document.getElementById('tw-connected').style.display = 'none';
+    document.getElementById('tw-dot').classList.remove('on');
+    updateChatBadge();
+    log('Twitch token expired \u2014 click Connect to re-authenticate.');
 }
 
 function addTickerRow(text) {
@@ -976,22 +980,47 @@ function disconnectTwitch() {
 // First dashboard to open claims it. The other becomes helper and shows "Claim" button.
 // Owner is released on page unload; helper can steal it at any time.
 
+function showTwWarn(msg) {
+    const el = document.getElementById('tw-warn-banner');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+function hideTwWarn() {
+    const el = document.getElementById('tw-warn-banner');
+    if (el) el.style.display = 'none';
+}
+
 function updateChatBadge() {
-    const badge     = document.getElementById('chat-badge');
-    const claimBtn  = document.getElementById('claim-btn');
+    const badge    = document.getElementById('chat-badge');
+    const claimBtn = document.getElementById('claim-btn');
+    const hasTwitch = !!(twitchToken && twitchLogin);
     if (isChatPrimary) {
         badge.textContent  = '● Chat Primary';
         badge.className    = 'chat-badge primary';
         claimBtn.style.display = 'none';
+        if (!hasTwitch) {
+            showTwWarn('⚠️ You are Chat Primary but Twitch is not connected. Follower checks and chat messages will not work. Connect your Twitch account above.');
+        } else {
+            hideTwWarn();
+        }
     } else {
         badge.textContent  = 'Chat Helper';
         badge.className    = 'chat-badge helper';
-        claimBtn.style.display = '';
+        claimBtn.style.display = hasTwitch ? '' : 'none';
+        if (!hasTwitch) {
+            showTwWarn('⚠️ Connect your Twitch account to claim Chat Primary.');
+        } else {
+            hideTwWarn();
+        }
     }
 }
 
 function claimChatPrimary() {
-    // Unconditionally write our session ID — takes over from whoever held it
+    if (!twitchToken || !twitchLogin) {
+        showTwWarn('⚠️ Connect your Twitch account before claiming Chat Primary.');
+        return;
+    }
     chatPrimaryRef.set(SESSION_ID).then(() => {
         isChatPrimary = true;
         updateChatBadge();
@@ -1016,6 +1045,9 @@ function listenChatPrimary() {
                 if (result.snapshot.val() === SESSION_ID) {
                     isChatPrimary = true;
                     log('This dashboard is now Chat Primary (auto-claimed).');
+                    if (!twitchToken || !twitchLogin) {
+                        showTwWarn('⚠️ Auto-claimed Chat Primary but Twitch is not connected. Connect your Twitch account to enable follower checks and chat replies.');
+                    }
                 } else {
                     isChatPrimary = false;
                 }
@@ -1398,7 +1430,12 @@ async function isFollower(userId, login) {
             `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${effectiveUserId}`,
             { headers: { 'Authorization': `Bearer ${twitchToken}`, 'Client-Id': CLIENT_ID } }
         );
-        if (res.status === 401) { clearTwitchSession(); return false; }
+        if (res.status === 401) {
+            // Token expired mid-game — update UI and allow guess through rather than silently breaking
+            log('⚠️ Twitch token expired during follower check — reconnect Twitch to restore follower enforcement.');
+            handleTwitchExpiry();
+            return true; // allow guess — don't punish the player for a host auth issue
+        }
         const data   = await res.json();
         return Array.isArray(data.data) && data.data.length > 0;
     } catch { return false; }
