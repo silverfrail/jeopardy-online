@@ -362,7 +362,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v31</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v32</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -557,7 +557,7 @@ const db = firebase.initializeApp({
 let twitchToken   = localStorage.getItem('twitch_token');
 let broadcasterId = localStorage.getItem('broadcaster_id');
 let tmiClient     = null;
-let twitchLogin   = null;
+let twitchLogin   = localStorage.getItem('twitch_login') || null;
 let boardData     = null;
 let activeClue    = null;
 let pendingGuess  = null;       // { username, text }
@@ -807,6 +807,15 @@ function initDashboard() {
     listenHostChat();               // sync host-to-host chat
     initPanelDrag();                // sidebar drag-and-drop reordering
     initTMI();  // always listen to chat, regardless of OAuth state
+    // Optimistically restore Twitch UI if cached credentials exist
+    // (checkTwitchSession will validate async and revert if expired)
+    if (twitchToken && twitchLogin) {
+        document.getElementById('tw-connect').style.display   = 'none';
+        document.getElementById('tw-connected').style.display = '';
+        document.getElementById('tw-dot').classList.add('on');
+        document.getElementById('tw-user').innerText = twitchLogin;
+        document.getElementById('tw-chan').innerText = BROADCASTER;
+    }
     oauthReady.then(() => checkTwitchSession());
     // Release chat-primary lock when this tab closes
     window.addEventListener('beforeunload', releaseChatPrimary);
@@ -870,7 +879,15 @@ async function checkTwitchSession() {
     const res = await fetch('https://id.twitch.tv/oauth2/validate', {
         headers: { 'Authorization': `OAuth ${twitchToken}` }
     });
-    if (!res.ok) { clearTwitchSession(); return; }
+    if (!res.ok) {
+        clearTwitchSession();
+        // Show a reconnect notice instead of silently going dark
+        document.getElementById('tw-connect').style.display   = '';
+        document.getElementById('tw-connected').style.display = 'none';
+        document.getElementById('tw-dot').classList.remove('on');
+        log('Twitch token expired — click Connect to re-authenticate.');
+        return;
+    }
     const data = await res.json();
     const requiredScopes = ['moderator:read:followers', 'chat:read', 'chat:edit'];
     const granted = new Set(data.scopes || []);
@@ -901,13 +918,14 @@ async function setupTwitch(loginName) {
     document.getElementById('tw-chan').innerText = BROADCASTER;
     document.getElementById('tw-dot').classList.add('on');
     twitchLogin = loginName || null;
+    if (twitchLogin) localStorage.setItem('twitch_login', twitchLogin);
     // Reconnect IRC as authenticated so we can send chat replies when needed.
     initTMI();
     log('Twitch session active.');
 }
 
 function clearTwitchSession() {
-    ['twitch_token', 'broadcaster_id'].forEach(k => localStorage.removeItem(k));
+    ['twitch_token', 'broadcaster_id', 'twitch_login'].forEach(k => localStorage.removeItem(k));
     twitchToken = null; broadcasterId = null; twitchLogin = null;
     userIdCache.clear();
     lastBotReplyAt.clear();
@@ -1078,6 +1096,15 @@ function listenTimerSettings() {
             tickerInterval = val.tickerInterval;
             localStorage.setItem('cfg_ticker_secs', String(tickerInterval));
             changed = true;
+        }
+        // Restore lastCorrectAnswerer from Firebase on init/refresh
+        if (val.lastCorrectAnswerer !== undefined) {
+            const incoming = val.lastCorrectAnswerer || null;
+            if (lastCorrectAnswerer === null && incoming !== null) {
+                lastCorrectAnswerer = incoming;
+                log(`Restored last correct answerer: ${lastCorrectAnswerer}`);
+                changed = true;
+            }
         }
         if (!changed) return;
         log(`Settings synced. Timer: ${timerEnabled ? timerSeconds + 's' : 'off'}. DD: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
@@ -1587,6 +1614,7 @@ function judgeGuess(correct) {
             lastCorrectAnswerer = guess.username;
             adjustScore(guess.username, scoreAmt);
             clueScorers.push({ username: guess.username, delta: scoreAmt, wager: isDD });
+            db.ref('boardState/hostSettings/lastCorrectAnswerer').set(guess.username);
             log(`✓ ${guess.username} correct on ${clueContext}! +$${scoreAmt}`);
             dismissClue('correct');
         } else {
@@ -1971,7 +1999,10 @@ function commitUpload(resetScores) {
     // Ask about lastCorrectAnswerer before wiping state
     if (lastCorrectAnswerer !== null) {
         const keep = confirm(`Is this a continuation of the previous game?\n\nOK  →  Keep "${lastCorrectAnswerer}" as the last correct answerer (Daily Double eligible)\nCancel  →  Fresh game — clear it`);
-        if (!keep) lastCorrectAnswerer = null;
+        if (!keep) {
+            lastCorrectAnswerer = null;
+            db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
+        }
     }
     // Write tiles to Firebase without DD flags — DDs are assigned in applySettings
     const tiles = pendingUploadTiles.map(t => { const c = { ...t }; delete c.dd; return c; });
@@ -2042,7 +2073,10 @@ function resetGameState() {
     // Ask about lastCorrectAnswerer before wiping state
     if (lastCorrectAnswerer !== null) {
         const keep = confirm(`Is this a continuation of the previous game?\n\nOK  →  Keep "${lastCorrectAnswerer}" as the last correct answerer (Daily Double eligible)\nCancel  →  Fresh game — clear it`);
-        if (!keep) lastCorrectAnswerer = null;
+        if (!keep) {
+            lastCorrectAnswerer = null;
+            db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
+        }
     }
     // Reset tiles, scores, log, and active clue; unlock DD settings; keep modal open
     gameStarted   = false;
