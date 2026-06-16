@@ -40,7 +40,8 @@
 
         /* ── Panels ── */
         .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; flex-shrink: 0; }
-        .ptitle { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .ptitle { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 10px; display: flex; justify-content: flex-start; align-items: center; gap: 6px; }
+        .ptitle .panel-toggle, .ptitle > div:last-child { margin-left: auto; }
 
         /* ── Status ── */
         .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; display: inline-block; margin-right: 5px; transition: background 0.3s; }
@@ -169,7 +170,7 @@
         /* ── Modal ── */
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10000; align-items: center; justify-content: center; }
         .modal.open { display: flex; }
-        .mbox { background: var(--panel); border: 1px solid var(--blue); border-radius: 8px; padding: 24px; width: 420px; }
+        .mbox { background: var(--panel); border: 1px solid var(--blue); border-radius: 8px; padding: 24px; width: 420px; max-height: 90vh; overflow-y: auto; }
         .mbox h3 { margin-bottom: 16px; }
         .mbox input { width: 100%; margin-bottom: 10px; }
         .mrow { display: flex; gap: 8px; margin-top: 14px; }
@@ -313,6 +314,17 @@
         </div>
 
         <div class="cfg-section">
+            <div class="cfg-section-title">Chat</div>
+            <div class="cfg-row">
+                <div class="cfg-row-main">
+                    <label for="stg-guess-cmd" style="font-size:0.88rem;">Guess command</label>
+                    <span class="tip" data-tip="The chat command viewers use to submit answers. Default is !guess. Changes take effect when you click Apply.">?</span>
+                </div>
+                <input type="text" id="stg-guess-cmd" style="width:90px;margin-bottom:0!important;font-size:0.82rem;text-align:center;" placeholder="!guess">
+            </div>
+        </div>
+
+        <div class="cfg-section">
             <div class="cfg-section-title">Reset Game</div>
             <div style="font-size:0.8rem;color:var(--dim);margin-bottom:10px;">Marks all clues as unplayed and clears scores and activity log. Settings stay open so you can review before starting.</div>
             <button class="btn-red" style="width:100%" onclick="resetGameState()">♻️ Reset Board &amp; Scores</button>
@@ -435,12 +447,6 @@
                     <input type="checkbox" id="followers-only" checked onchange="updateFollowersOnly()">
                     <label for="followers-only" style="color:var(--dim)">Followers only</label>
                     <span class="tip" data-tip="When checked, only viewers who follow your Twitch channel can submit guesses. Requires connecting your Twitch account below.">?</span>
-                </div>
-
-                <!-- Guess command -->
-                <div class="toggle-row" style="margin-bottom:10px;">
-                    <label for="guess-cmd" style="color:var(--dim);font-size:0.82rem;">Guess command</label>
-                    <input type="text" id="guess-cmd" style="width:80px;margin-left:auto;font-size:0.82rem;" placeholder="!guess" oninput="updateGuessCommand(this.value)">
                 </div>
 
                 <!-- Auth section — hidden when followers-only is off -->
@@ -783,9 +789,6 @@ function initDashboard() {
     initPanelDrag();                // sidebar drag-and-drop reordering
     initTMI();  // always listen to chat, regardless of OAuth state
     oauthReady.then(() => checkTwitchSession());
-    // Restore guess command input
-    const gcEl = document.getElementById('guess-cmd');
-    if (gcEl) gcEl.value = guessCommand;
     // Release chat-primary lock when this tab closes
     window.addEventListener('beforeunload', releaseChatPrimary);
 }
@@ -889,12 +892,6 @@ function clearTwitchSession() {
     twitchToken = null; broadcasterId = null; twitchLogin = null;
     userIdCache.clear();
     lastBotReplyAt.clear();
-}
-
-function updateGuessCommand(val) {
-    const cmd = val.trim() || '!guess';
-    guessCommand = cmd;
-    localStorage.setItem('cfg_guess_cmd', cmd);
 }
 
 function updateFollowersOnly() {
@@ -1025,6 +1022,11 @@ function listenTimerSettings() {
         if (val.penaltyDD !== undefined && val.penaltyDD !== penaltyDD) {
             penaltyDD = val.penaltyDD; changed = true;
         }
+        if (val.guessCommand !== undefined && val.guessCommand !== guessCommand) {
+            guessCommand = val.guessCommand;
+            localStorage.setItem('cfg_guess_cmd', guessCommand);
+            changed = true;
+        }
         if (!changed) return;
         log(`Settings synced. Timer: ${timerEnabled ? timerSeconds + 's' : 'off'}. DD: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
         // If the settings modal is open, update its inputs to reflect the new values
@@ -1044,6 +1046,7 @@ function listenTimerSettings() {
             document.getElementById('stg-penalty-dd').checked       = penaltyDD;
             document.getElementById('stg-penalty-regular').checked  = penaltyRegular;
             document.getElementById('stg-penalty-dd').checked       = penaltyDD;
+            document.getElementById('stg-guess-cmd').value          = guessCommand;
         }
     });
 }
@@ -2002,6 +2005,7 @@ function openSettings() {
     document.getElementById('stg-dd-opts').style.display    = ddEnabled ? 'block' : 'none';
     document.getElementById('stg-penalty-regular').checked  = penaltyRegular;
     document.getElementById('stg-penalty-dd').checked       = penaltyDD;
+    document.getElementById('stg-guess-cmd').value          = guessCommand;
     // Timer locked while clue active; DD locked once game has started
     const clueActive = activeClue && activeClue.status !== 'inactive';
     document.getElementById('stg-clue-warn').style.display       = clueActive ? '' : 'none';
@@ -2022,9 +2026,11 @@ function applySettings() {
     ddWagerTimeout = Math.min(120, Math.max(10, parseInt(document.getElementById('stg-dd-wager-timeout').value, 10) || 60));
     penaltyRegular = document.getElementById('stg-penalty-regular').checked;
     penaltyDD      = document.getElementById('stg-penalty-dd').checked;
+    guessCommand   = document.getElementById('stg-guess-cmd').value.trim() || '!guess';
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
-    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds, ddEnabled, ddCount, ddWagerTimeout, penaltyRegular, penaltyDD });
+    localStorage.setItem('cfg_guess_cmd',  guessCommand);
+    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds, ddEnabled, ddCount, ddWagerTimeout, penaltyRegular, penaltyDD, guessCommand });
 
     // (Re)assign Daily Doubles on the board if the game hasn't started yet
     if (!gameStarted) {
@@ -2047,7 +2053,7 @@ function applySettings() {
     }
 
     closeModal('settings-modal');
-    log(`Settings saved. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}. Daily Doubles: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
+    log(`Settings saved. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}. Daily Doubles: ${ddEnabled ? ddCount + ' per board' : 'off'}. Guess command: ${guessCommand}.`);
 }
 
 
