@@ -84,6 +84,13 @@
         #ticker-text { color: var(--yellow); font-size: 2rem; font-weight: 800; text-align: center; letter-spacing: 0.04em; opacity: 0; transition: opacity 0.5s ease; max-width: 92%; }
         #ticker-text.visible { opacity: 1; }
 
+        /* ── Splash Screen ── */
+        #splash-overlay { position: absolute; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 32px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        #splash-overlay.active { opacity: 1; pointer-events: auto; }
+        .splash-title { font-size: 8rem; font-weight: 900; letter-spacing: 0.12em; color: var(--yellow); text-shadow: 0 0 60px rgba(255,255,90,0.45); text-transform: uppercase; }
+        .splash-subtitle { font-size: 2rem; font-weight: 700; color: rgba(255,255,255,0.45); letter-spacing: 0.18em; text-transform: uppercase; }
+        .splash-bar { width: 320px; height: 4px; background: var(--blue); border-radius: 2px; opacity: 0.6; }
+
         /* ── Settings Gear ── */
         #gear { position: fixed; bottom: 18px; right: 18px; font-size: 22px; cursor: pointer; opacity: 0.35; transition: opacity 0.2s; color: #fff; z-index: 50; user-select: none; }
         #gear:hover { opacity: 1; }
@@ -108,6 +115,11 @@
 
 <div id="canvas">
     <div id="ticker-bar"><div id="ticker-text"></div></div>
+    <div id="splash-overlay">
+        <div class="splash-title">Jeopardy!</div>
+        <div class="splash-bar"></div>
+        <div class="splash-subtitle">Get ready to play</div>
+    </div>
     <div class="game-area">
         <div class="cat-row"  id="cats"></div>
         <div class="clue-grid" id="grid"></div>
@@ -454,6 +466,20 @@ function renderLeaderboard(scores) {
         el.appendChild(d);
     });
 }
+
+// ── ACTIVE SCREEN LISTENER ────────────────────────────────────────────────────
+db.ref('boardState/activeScreen').on('value', snap => {
+    const screen = snap.val() || 'splash';
+    const splash  = document.getElementById('splash-overlay');
+    const gameArea = document.querySelector('.game-area');
+    if (screen === 'splash') {
+        splash.classList.add('active');
+        if (gameArea) gameArea.style.visibility = 'hidden';
+    } else {
+        splash.classList.remove('active');
+        if (gameArea) gameArea.style.visibility = '';
+    }
+});
 
 // ── OBS REFRESH LISTENER ──────────────────────────────────────────────────────
 db.ref('refreshTrigger').on('value', snap => {

@@ -97,6 +97,15 @@
         .panel.collapsed > *:not(.ptitle),
         .log-panel.collapsed > *:not(.ptitle) { display: none !important; }
 
+        /* ── Screen Toggle (radio-style) ── */
+        .screen-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+        .screen-toggle-track { width: 32px; height: 18px; border-radius: 9px; background: rgba(255,255,255,0.12); border: 1px solid var(--border); position: relative; transition: background 0.2s; flex-shrink: 0; }
+        .screen-toggle-track.on { background: rgba(0,200,100,0.4); border-color: #00c864; }
+        .screen-toggle-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.4); transition: transform 0.2s, background 0.2s; }
+        .screen-toggle-track.on::after { transform: translateX(14px); background: #00c864; }
+        .screen-toggle-label { font-size: 0.7rem; color: var(--dim); font-weight: 600; letter-spacing: 0.04em; transition: color 0.2s; }
+        .screen-toggle-track.on + .screen-toggle-label { color: #00c864; }
+
         /* ── Panel Drag ── */
         .panel-grip { color: var(--dim); cursor: grab; font-size: 0.85rem; padding: 0 4px 0 0; line-height: 1; flex-shrink: 0; user-select: none; }
         .panel-grip:active { cursor: grabbing; }
@@ -363,7 +372,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v33</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v34</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -376,9 +385,33 @@
         <!-- Main Column -->
         <div class="main">
 
+            <!-- Splash Screen -->
+            <div class="panel" id="splash-panel">
+                <div class="ptitle">
+                    Splash Screen
+                    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                        <span class="screen-toggle" onclick="setActiveScreen('splash')" title="Show splash screen on preview">
+                            <span class="screen-toggle-track" id="screen-toggle-splash"></span>
+                            <span class="screen-toggle-label">LIVE</span>
+                        </span>
+                        <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
+                    </div>
+                </div>
+                <div style="color:var(--dim);font-size:0.8rem;padding:8px 0;">Placeholder splash screen shown to viewers while the game is not in progress.</div>
+            </div>
+
             <!-- Live Board -->
-            <div class="panel">
-                <div class="ptitle">Live Board</div>
+            <div class="panel" id="board-panel">
+                <div class="ptitle">
+                    Live Board
+                    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                        <span class="screen-toggle" onclick="setActiveScreen('board')" title="Show live board on preview">
+                            <span class="screen-toggle-track" id="screen-toggle-board"></span>
+                            <span class="screen-toggle-label">LIVE</span>
+                        </span>
+                        <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
+                    </div>
+                </div>
                 <div id="board-wrap"></div>
             </div>
 
@@ -633,6 +666,36 @@ function randomStr(len) {
 function escapeHtml(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// ── SCREEN SELECTOR ──────────────────────────────────────────────────────────
+function setActiveScreen(screen) {
+    // Radio-style: ignore clicks on the already-active screen
+    db.ref('boardState/activeScreen').once('value').then(snap => {
+        if (snap.val() === screen) return;
+        db.ref('boardState/activeScreen').set(screen);
+        log(`Preview screen → ${screen}`);
+    });
+}
+
+function updateScreenToggles(screen) {
+    const splashTrack = document.getElementById('screen-toggle-splash');
+    const boardTrack  = document.getElementById('screen-toggle-board');
+    if (!splashTrack || !boardTrack) return;
+    splashTrack.classList.toggle('on', screen === 'splash');
+    boardTrack.classList.toggle('on',  screen === 'board');
+}
+
+function listenActiveScreen() {
+    db.ref('boardState/activeScreen').on('value', snap => {
+        const screen = snap.val();
+        if (screen) {
+            updateScreenToggles(screen);
+        } else {
+            // Nothing set yet — default to splash
+            db.ref('boardState/activeScreen').set('splash');
+        }
+    });
+}
+
 function togglePanel(btn) {
     const panel = btn.closest('.panel, .log-panel');
     const collapsed = panel.classList.toggle('collapsed');
@@ -808,6 +871,7 @@ function initDashboard() {
     listenCategorySubmissions();   // sync viewer category suggestions
     listenHostChat();               // sync host-to-host chat
     initPanelDrag();                // sidebar drag-and-drop reordering
+    listenActiveScreen();           // sync preview screen selection
     initTMI();  // always listen to chat, regardless of OAuth state
     // Optimistically restore Twitch UI if cached credentials exist
     // (checkTwitchSession will validate async and revert if expired)
