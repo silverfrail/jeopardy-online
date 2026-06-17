@@ -388,29 +388,53 @@
             <!-- Splash Screen -->
             <div class="panel" id="splash-panel">
                 <div class="ptitle">
+                    <span class="screen-toggle" onclick="setActiveScreen('splash')" title="Show splash screen on preview">
+                        <span class="screen-toggle-track" id="screen-toggle-splash"></span>
+                        <span class="screen-toggle-label">LIVE</span>
+                    </span>
                     Splash Screen
-                    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-                        <span class="screen-toggle" onclick="setActiveScreen('splash')" title="Show splash screen on preview">
-                            <span class="screen-toggle-track" id="screen-toggle-splash"></span>
-                            <span class="screen-toggle-label">LIVE</span>
-                        </span>
-                        <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
-                    </div>
+                    <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
                 </div>
                 <div style="color:var(--dim);font-size:0.8rem;padding:8px 0;">Placeholder splash screen shown to viewers while the game is not in progress.</div>
+            </div>
+
+            <!-- First Question -->
+            <div class="panel" id="firstq-panel">
+                <div class="ptitle">
+                    <span class="screen-toggle" onclick="setActiveScreen('firstq')" title="Show first question on preview">
+                        <span class="screen-toggle-track" id="screen-toggle-firstq"></span>
+                        <span class="screen-toggle-label">LIVE</span>
+                    </span>
+                    First Question
+                    <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
+                </div>
+                <div id="fq-no-data" style="color:var(--dim);font-size:0.8rem;padding:8px 0;">No question loaded. Upload a board with a <code>firstQuestion</code> field.</div>
+                <div id="fq-data" style="display:none;">
+                    <div class="ac-q" id="fq-question" style="margin-bottom:6px;"></div>
+                    <div class="ac-albl">Correct Answer (host only)</div>
+                    <div class="ac-ans" id="fq-answer" style="margin-bottom:10px;"></div>
+                    <div id="fq-pg-panel" style="display:none;background:#1a1500;border:2px solid var(--yellow);border-radius:6px;padding:12px;margin-top:4px;">
+                        <div class="pg-who" id="fq-pg-who"></div>
+                        <div class="pg-txt" id="fq-pg-txt"></div>
+                        <div class="pg-mtch" id="fq-pg-mtch"></div>
+                        <div class="pg-acts">
+                            <button class="btn-ok"  style="flex:1" onclick="judgeFirstQuestion(true)">✓ Correct</button>
+                            <button class="btn-red" style="flex:1" onclick="judgeFirstQuestion(false)">✗ Wrong</button>
+                        </div>
+                        <div id="fq-pg-queue" style="font-size:0.72rem;color:var(--dim);margin-top:8px;display:none;"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Live Board -->
             <div class="panel" id="board-panel">
                 <div class="ptitle">
+                    <span class="screen-toggle" onclick="setActiveScreen('board')" title="Show live board on preview">
+                        <span class="screen-toggle-track" id="screen-toggle-board"></span>
+                        <span class="screen-toggle-label">LIVE</span>
+                    </span>
                     Live Board
-                    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-                        <span class="screen-toggle" onclick="setActiveScreen('board')" title="Show live board on preview">
-                            <span class="screen-toggle-track" id="screen-toggle-board"></span>
-                            <span class="screen-toggle-label">LIVE</span>
-                        </span>
-                        <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
-                    </div>
+                    <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
                 </div>
                 <div id="board-wrap"></div>
             </div>
@@ -636,7 +660,10 @@ let ddCount             = 1;
 let ddWagerTimeout      = 60;    // seconds to wait for !wager before skip
 let ddWagerHandle       = null;  // setInterval handle for wager countdown
 let ddWagerRemaining    = 0;
-let lastCorrectAnswerer = null;  // username of most recent correct answerer
+let lastCorrectAnswerer  = null;  // username of most recent correct answerer
+let firstQuestionData    = null;  // { question, answer, category } — answer host-only, never in Firebase
+let pendingFirstQuestion = null;  // staging area between uploadBoard() and commitUpload()
+let currentScreen        = 'splash'; // locally tracked active preview screen
 let leaderboardScores   = {};    // cached scores for wager limit calc
 let gameStarted         = false; // true once first tile is clicked; locks DD settings
 let clueScorers         = [];    // per-clue scorer records; written to tileResults on reveal
@@ -677,10 +704,13 @@ function setActiveScreen(screen) {
 }
 
 function updateScreenToggles(screen) {
+    currentScreen = screen;
     const splashTrack = document.getElementById('screen-toggle-splash');
+    const firstqTrack = document.getElementById('screen-toggle-firstq');
     const boardTrack  = document.getElementById('screen-toggle-board');
     if (!splashTrack || !boardTrack) return;
     splashTrack.classList.toggle('on', screen === 'splash');
+    if (firstqTrack) firstqTrack.classList.toggle('on', screen === 'firstq');
     boardTrack.classList.toggle('on',  screen === 'board');
 }
 
@@ -1269,15 +1299,23 @@ function listenPendingGuess() {
         const val = snap.val();
         pendingGuess = val || null;
         if (val) {
-            showPending(val);
+            if (currentScreen === 'firstq' && firstQuestionData) {
+                showFQPending(val);
+            } else {
+                showPending(val);
+            }
         } else {
             document.getElementById('pg-panel').style.display = 'none';
+            const fqPg = document.getElementById('fq-pg-panel');
+            if (fqPg) fqPg.style.display = 'none';
             updateQueueIndicator();
+            updateFQQueueIndicator();
         }
     });
     db.ref('boardState/hostSettings/guessQueue').on('value', snap => {
         guessQueue = snap.val() || [];
         updateQueueIndicator();
+        updateFQQueueIndicator();
     });
     db.ref('boardState/hostSettings/wrongGuessers').on('value', snap => {
         wrongGuessers = new Set(snap.val() || []);
@@ -1419,7 +1457,12 @@ async function onChat(channel, tags, message) {
 
     const guessText = msg.slice(guessCommand.length).trim();
     if (!guessText) return;
-    if (!activeClue || (activeClue.status !== 'active' && activeClue.status !== 'daily-double-active')) return;
+    if (!activeClue || (activeClue.status !== 'active' && activeClue.status !== 'daily-double-active')) {
+        if (currentScreen === 'firstq' && firstQuestionData) {
+            await handleFirstQuestionGuess(username, tags, guessText);
+        }
+        return;
+    }
 
     // For Daily Double: only the designated player may submit a guess
     if (activeClue.status === 'daily-double-active' &&
@@ -1741,6 +1784,125 @@ function judgeGuess(correct) {
             }
         }
     });
+}
+
+// ── FIRST QUESTION ────────────────────────────────────────────────────────────
+async function handleFirstQuestionGuess(username, tags, guessText) {
+    if (wrongGuessers.has(username.toLowerCase())) return;
+    if (guessQueue.some(g => g.username.toLowerCase() === username.toLowerCase())) return;
+
+    const login = (tags['username'] || username || '').toLowerCase();
+    const followersOnly = document.getElementById('followers-only')?.checked ?? true;
+    if (followersOnly && twitchToken) {
+        const allowed = await isFollower(tags['user-id'], login || username.toLowerCase());
+        if (!allowed) {
+            log(`${username} guessed (First Q) — not a follower, ignored.`);
+            const key = username.toLowerCase();
+            const now = Date.now();
+            if (now - (lastBotReplyAt.get(key) || 0) > 10000) {
+                sendChatMessage(`@${username} !guess is only enabled for followers right now.`);
+                lastBotReplyAt.set(key, now);
+            }
+            return;
+        }
+    } else if (followersOnly && !twitchToken) {
+        log('Followers-only enabled but Twitch auth missing; allowing First Q guess (verification unavailable).');
+    }
+
+    if (pendingGuess) {
+        guessQueue.push({ username, text: guessText });
+        db.ref('boardState/hostSettings/guessQueue').set(guessQueue);
+        log(`First Q guess queued: ${username} → "${guessText}" (${guessQueue.length} in queue)`);
+        updateFQQueueIndicator();
+        return;
+    }
+
+    pendingGuess = { username, text: guessText };
+    db.ref('boardState/hostSettings/pendingGuess').set(pendingGuess);
+    showFQPending(pendingGuess);
+    log(`First Q guess locked: ${username} → "${guessText}"`);
+}
+
+function showFQPending({ username, text }) {
+    const ans   = firstQuestionData?.answer || '';
+    const score = matchScore(text, ans);
+    const pct   = Math.round(score * 100);
+    const cls   = score >= 0.75 ? 'hi' : score >= 0.45 ? 'mid' : 'lo';
+    const lbl   = score >= 0.75 ? 'Likely correct' : score >= 0.45 ? 'Possible match' : 'Low similarity';
+    document.getElementById('fq-pg-who').innerText = username;
+    document.getElementById('fq-pg-txt').innerText = `"${text}"`;
+    const m = document.getElementById('fq-pg-mtch');
+    m.innerText = `${pct}% — ${lbl}`;
+    m.className = `pg-mtch ${cls}`;
+    document.getElementById('fq-pg-panel').style.display = 'block';
+    updateFQQueueIndicator();
+}
+
+function judgeFirstQuestion(correct) {
+    if (!pendingGuess || !firstQuestionData) return;
+    const guess = { ...pendingGuess };
+    db.ref('boardState/hostSettings/pendingGuess').transaction(current => {
+        if (current === null) return;
+        return null;
+    }).then(result => {
+        if (!result.committed) return;
+        pendingGuess = null;
+        if (correct) {
+            lastCorrectAnswerer = guess.username;
+            db.ref('boardState/hostSettings/lastCorrectAnswerer').set(guess.username);
+            log(`✓ ${guess.username} correct on First Question! lastCorrectAnswerer set. No points awarded.`);
+            wrongGuessers = new Set();
+            guessQueue    = [];
+            db.ref('boardState/hostSettings').update({ pendingGuess: null, guessQueue: null, wrongGuessers: null });
+            document.getElementById('fq-pg-panel').style.display = 'none';
+            updateFQQueueIndicator();
+        } else {
+            wrongGuessers.add(guess.username.toLowerCase());
+            db.ref('boardState/hostSettings/wrongGuessers').set([...wrongGuessers]);
+            log(`✗ ${guess.username} wrong on First Question. No penalty.`);
+            showNextFQGuess();
+        }
+    });
+}
+
+function showNextFQGuess() {
+    if (guessQueue.length === 0) {
+        pendingGuess = null;
+        db.ref('boardState/hostSettings/pendingGuess').set(null);
+        document.getElementById('fq-pg-panel').style.display = 'none';
+        return;
+    }
+    const next = guessQueue.shift();
+    pendingGuess = next;
+    db.ref('boardState/hostSettings').update({ pendingGuess: next, guessQueue: guessQueue.length ? guessQueue : null });
+    showFQPending(next);
+    log(`Next First Q guess: ${next.username} → "${next.text}"`);
+}
+
+function updateFQQueueIndicator() {
+    const el = document.getElementById('fq-pg-queue');
+    if (!el) return;
+    if (guessQueue.length > 0) {
+        el.style.display = '';
+        el.textContent = `${guessQueue.length} more guess${guessQueue.length > 1 ? 'es' : ''} waiting in queue`;
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+function updateFirstQuestionCard() {
+    const noData = document.getElementById('fq-no-data');
+    const dataEl = document.getElementById('fq-data');
+    if (!noData || !dataEl) return;
+    if (firstQuestionData) {
+        noData.style.display = 'none';
+        dataEl.style.display = '';
+        document.getElementById('fq-question').textContent = firstQuestionData.question;
+        document.getElementById('fq-answer').textContent   = firstQuestionData.answer;
+    } else {
+        noData.style.display = '';
+        dataEl.style.display = 'none';
+    }
 }
 
 function dismissClue(reason) {
@@ -2078,6 +2240,9 @@ function uploadBoard() {
     try {
         const input = JSON.parse(document.getElementById('json-in').value);
         const board = input.board || input;
+        pendingFirstQuestion = input.firstQuestion
+            ? { question: input.firstQuestion.q || '', answer: input.firstQuestion.a || '', category: input.firstQuestion.category || '' }
+            : null;
         const tiles = [];
         board.forEach((catObj, ci) => {
             catObj.clues.forEach((clue, ri) => {
@@ -2120,8 +2285,14 @@ function commitUpload(resetScores) {
         log('Board uploaded. Scores kept.');
     }
     db.ref('activeClue').set({ status: 'inactive', tileId: null });
+    firstQuestionData = pendingFirstQuestion;
+    db.ref('boardState/firstQuestion').set(firstQuestionData
+        ? { question: firstQuestionData.question, category: firstQuestionData.category }
+        : null);
+    pendingFirstQuestion    = null;
     pendingUploadTiles      = null;
     pendingUploadCategories = null;
+    updateFirstQuestionCard();
     closeModal('upload-modal');
     openSettings();
 }
@@ -2136,8 +2307,9 @@ function generatePrompt() {
 The board must have exactly ${cats} categories with creative, thematic titles.
 Each category must have exactly ${ques} clues ordered by difficulty (200, 400, 600, 800, 1000).
 Each clue needs three fields: "v" (point value as a number), "q" (the clue as a Jeopardy-style statement/description — do NOT phrase it as a question), "a" (the correct answer the contestant should respond with).
+Also include a "firstQuestion" field at the top level: a single warm-up clue (same q/a/category format, no v field) used before the game to seed the first correct guesser. Give it a fun, accessible category name like "Warm-Up" or something thematic.
 All facts must be accurate. Return ONLY raw JSON, no markdown or explanation:
-{ "metadata": { "title": "${topic}" }, "board": [ { "category": "...", "clues": [ { "v": 200, "q": "...", "a": "..." } ] } ] }`;
+{ "metadata": { "title": "${topic}" }, "firstQuestion": { "category": "Warm-Up", "q": "...", "a": "..." }, "board": [ { "category": "...", "clues": [ { "v": 200, "q": "...", "a": "..." } ] } ] }`;
     navigator.clipboard.writeText(prompt).then(() => {
         log('Prompt copied to clipboard.');
         closeModal('prompt-modal');

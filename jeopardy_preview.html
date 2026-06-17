@@ -91,6 +91,13 @@
         .splash-subtitle { font-size: 2rem; font-weight: 700; color: rgba(255,255,255,0.45); letter-spacing: 0.18em; text-transform: uppercase; }
         .splash-bar { width: 320px; height: 4px; background: var(--blue); border-radius: 2px; opacity: 0.6; }
 
+        /* ── First Question Overlay ── */
+        #firstq-overlay { position: absolute; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 28px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        #firstq-overlay.active { opacity: 1; pointer-events: auto; }
+        .firstq-category { font-size: 2.2rem; font-weight: 800; letter-spacing: 0.14em; color: rgba(255,255,255,0.5); text-transform: uppercase; }
+        .firstq-question { font-size: 3.8rem; font-weight: 900; color: #fff; text-align: center; max-width: 1400px; line-height: 1.2; text-transform: uppercase; text-shadow: 0 2px 24px rgba(0,0,0,0.6); }
+        .firstq-bar { width: 320px; height: 4px; background: var(--blue); border-radius: 2px; opacity: 0.6; }
+
         /* ── Settings Gear ── */
         #gear { position: fixed; bottom: 18px; right: 18px; font-size: 22px; cursor: pointer; opacity: 0.35; transition: opacity 0.2s; color: #fff; z-index: 50; user-select: none; }
         #gear:hover { opacity: 1; }
@@ -119,6 +126,11 @@
         <div class="splash-title">Jeopardy!</div>
         <div class="splash-bar"></div>
         <div class="splash-subtitle">Get ready to play</div>
+    </div>
+    <div id="firstq-overlay">
+        <div class="firstq-category" id="firstq-category"></div>
+        <div class="firstq-bar"></div>
+        <div class="firstq-question" id="firstq-question"></div>
     </div>
     <div class="game-area">
         <div class="cat-row"  id="cats"></div>
@@ -471,14 +483,19 @@ function renderLeaderboard(scores) {
 db.ref('boardState/activeScreen').on('value', snap => {
     const screen = snap.val() || 'splash';
     const splash  = document.getElementById('splash-overlay');
+    const firstq  = document.getElementById('firstq-overlay');
     const gameArea = document.querySelector('.game-area');
-    if (screen === 'splash') {
-        splash.classList.add('active');
-        if (gameArea) gameArea.style.visibility = 'hidden';
-    } else {
-        splash.classList.remove('active');
-        if (gameArea) gameArea.style.visibility = '';
-    }
+    splash.classList.toggle('active',  screen === 'splash');
+    if (firstq) firstq.classList.toggle('active', screen === 'firstq');
+    if (gameArea) gameArea.style.visibility = (screen === 'board') ? '' : 'hidden';
+});
+
+db.ref('boardState/firstQuestion').on('value', snap => {
+    const data = snap.val();
+    const catEl = document.getElementById('firstq-category');
+    const qEl   = document.getElementById('firstq-question');
+    if (catEl) catEl.textContent = (data && data.category) ? data.category : '';
+    if (qEl)   qEl.textContent   = (data && data.question)  ? data.question  : '';
 });
 
 // ── OBS REFRESH LISTENER ──────────────────────────────────────────────────────
