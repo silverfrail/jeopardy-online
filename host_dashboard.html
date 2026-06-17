@@ -372,7 +372,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v34</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v38</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -412,7 +412,8 @@
                 <div id="fq-data" style="display:none;">
                     <div class="ac-q" id="fq-question" style="margin-bottom:6px;"></div>
                     <div class="ac-albl">Correct Answer (host only)</div>
-                    <div class="ac-ans" id="fq-answer" style="margin-bottom:10px;"></div>
+                    <div class="ac-ans" id="fq-answer" style="margin-bottom:6px;"></div>
+                    <div id="fq-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-bottom:10px;">Source: <a id="fq-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a></div>
                     <div id="fq-pg-panel" style="display:none;background:#1a1500;border:2px solid var(--yellow);border-radius:6px;padding:12px;margin-top:4px;">
                         <div class="pg-who" id="fq-pg-who"></div>
                         <div class="pg-txt" id="fq-pg-txt"></div>
@@ -454,6 +455,7 @@
                     <div class="ac-q"   id="ac-q"></div>
                     <div class="ac-albl" id="ac-albl">Correct Answer</div>
                     <div class="ac-ans" id="ac-ans"></div>
+                    <div id="ac-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-top:4px;">Source: <a id="ac-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a></div>
 
                     <!-- Countdown Timer -->
                     <div id="ac-timer" style="display:none;">
@@ -1636,6 +1638,15 @@ function setClueUI(clue) {
         document.getElementById('ac-q').innerText    = clue.question || '';
         document.getElementById('ac-albl').innerText = 'The answer was';
         document.getElementById('ac-ans').innerText  = clue.answer || '—';
+        const srcReveal = document.getElementById('ac-src');
+        const srcLinkReveal = document.getElementById('ac-src-link');
+        if (srcReveal && srcLinkReveal) {
+            if (clue.src || clue.url) {
+                srcLinkReveal.textContent = clue.src || clue.url;
+                srcLinkReveal.href = clue.url || '#';
+                srcReveal.style.display = '';
+            } else { srcReveal.style.display = 'none'; }
+        }
         if (pgPanel)    pgPanel.style.display   = 'none';
         if (arDismiss)  arDismiss.style.display  = 'block';
         if (dismissBtn) dismissBtn.style.display = 'none';
@@ -1651,6 +1662,8 @@ function setClueUI(clue) {
     document.getElementById('ac-val').innerText  = valLabel;
     document.getElementById('ac-q').innerText    = clue.question || '';
     document.getElementById('ac-ans').innerText  = clue.answer   || '—';
+    const srcActive = document.getElementById('ac-src');
+    if (srcActive) srcActive.style.display = 'none'; // source shown only on answer-reveal
     if (arDismiss)  arDismiss.style.display  = 'none';
     if (dismissBtn) dismissBtn.style.display = '';
 }
@@ -1908,6 +1921,15 @@ function updateFirstQuestionCard() {
         dataEl.style.display = '';
         document.getElementById('fq-question').textContent = firstQuestionData.question;
         document.getElementById('fq-answer').textContent   = firstQuestionData.answer;
+        const fqSrc = document.getElementById('fq-src');
+        const fqSrcLink = document.getElementById('fq-src-link');
+        if (fqSrc && fqSrcLink) {
+            if (firstQuestionData.src || firstQuestionData.url) {
+                fqSrcLink.textContent = firstQuestionData.src || firstQuestionData.url;
+                fqSrcLink.href = firstQuestionData.url || '#';
+                fqSrc.style.display = '';
+            } else { fqSrc.style.display = 'none'; }
+        }
     } else {
         noData.style.display = '';
         dataEl.style.display = 'none';
@@ -1952,7 +1974,9 @@ function revealAnswer() {
         status:   'answer-reveal',
         answer,
         category: activeClue.category || '',
-        value:    activeClue.value    || 0
+        value:    activeClue.value    || 0,
+        src:      activeClue.src      || '',
+        url:      activeClue.url      || ''
     });
 }
 
@@ -2134,7 +2158,7 @@ function initListeners() {
         const data = snap.val();
         if ((data?.status === 'active' || data?.status === 'daily-double-active') && boardData?.tiles) {
             const t    = boardData.tiles.find(t => t.id === data.tileId);
-            activeClue = { ...data, answer: t?.answer || '' };
+            activeClue = { ...data, answer: t?.answer || '', src: t?.src || '', url: t?.url || '' };
             clearWagerTimer();
             // Start clue timer when genuinely new, OR when transitioning from daily-double (same tileId, skip wager)
             const isNewClue = data.tileId !== lastActiveTileId || lastClueStatus === 'daily-double';
@@ -2245,12 +2269,21 @@ function initListeners() {
 let pendingUploadTiles = null;
 let pendingUploadCategories = null;
 
+function sanitizeAIJson(raw) {
+    // Strip markdown code fences the AI sometimes wraps output in
+    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'').trim();
+    // Remove trailing commas before } or ] (common AI mistake)
+    raw = raw.replace(/,(\s*[}\]])/g, '$1');
+    return raw;
+}
+
 function uploadBoard() {
     try {
-        const input = JSON.parse(document.getElementById('json-in').value);
+        const raw   = sanitizeAIJson(document.getElementById('json-in').value);
+        const input = JSON.parse(raw);
         const board = input.board || input;
         pendingFirstQuestion = input.firstQuestion
-            ? { question: input.firstQuestion.q || '', answer: input.firstQuestion.a || '', category: input.firstQuestion.category || '' }
+            ? { question: input.firstQuestion.q || '', answer: input.firstQuestion.a || '', category: input.firstQuestion.category || '', src: input.firstQuestion.src || '', url: input.firstQuestion.url || '' }
             : null;
         const tiles = [];
         board.forEach((catObj, ci) => {
@@ -2258,7 +2291,8 @@ function uploadBoard() {
                 tiles.push({
                     id: ci * catObj.clues.length + ri,
                     value: clue.v, question: clue.q, answer: clue.a || '',
-                    category: catObj.category, played: false
+                    category: catObj.category, played: false,
+                    src: clue.src || '', url: clue.url || ''
                 });
             });
         });
@@ -2310,10 +2344,10 @@ function generatePrompt() {
 `Generate a JSON object for a Jeopardy board on the topic: "${topic}".
 The board must have exactly ${cats} categories with creative, thematic titles.
 Each category must have exactly ${ques} clues ordered by difficulty (200, 400, 600, 800, 1000).
-Each clue needs three fields: "v" (point value as a number), "q" (the clue as a Jeopardy-style statement/description — do NOT phrase it as a question), "a" (the correct answer the contestant should respond with).
-Also include a "firstQuestion" field at the top level: a single warm-up clue (same q/a/category format, no v field) used before the game to seed the first correct guesser. Give it a fun, accessible category name like "Warm-Up" or something thematic.
-All facts must be accurate. Return ONLY raw JSON, no markdown or explanation:
-{ "metadata": { "title": "${topic}" }, "firstQuestion": { "category": "Warm-Up", "q": "...", "a": "..." }, "board": [ { "category": "...", "clues": [ { "v": 200, "q": "...", "a": "..." } ] } ] }`;
+Each clue needs five fields: "v" (point value as a number), "q" (the clue as a Jeopardy-style statement/description — do NOT phrase it as a question), "a" (the correct answer), "src" (the source name, e.g. "Wikipedia", "NASA", "Britannica"), "url" (a real, accurate URL to a page that supports the answer — prefer Wikipedia article URLs).
+Also include a "firstQuestion" field at the top level: a single warm-up clue (same q/a/category/src/url format, no v field) used before the game to seed the first correct guesser. Give it a fun, accessible category name like "Warm-Up" or something thematic.
+All facts must be accurate. IMPORTANT: Return ONLY valid JSON. Do not use quotation marks inside string values — rephrase the clue instead. If a title or phrase would normally use quotes, omit them or use alternative phrasing. Return ONLY raw JSON, no markdown or explanation:
+{ "metadata": { "title": "${topic}" }, "firstQuestion": { "category": "Warm-Up", "q": "...", "a": "...", "src": "...", "url": "..." }, "board": [ { "category": "...", "clues": [ { "v": 200, "q": "...", "a": "...", "src": "...", "url": "..." } ] } ] }`;
     navigator.clipboard.writeText(prompt).then(() => {
         log('Prompt copied to clipboard.');
         closeModal('prompt-modal');
