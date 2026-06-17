@@ -2271,14 +2271,9 @@ function uploadBoard() {
 
 function commitUpload(resetScores) {
     if (!pendingUploadTiles) return;
-    // Ask about lastCorrectAnswerer before wiping state
-    if (lastCorrectAnswerer !== null) {
-        const keep = confirm(`Is this a continuation of the previous game?\n\nOK  →  Keep "${lastCorrectAnswerer}" as the last correct answerer (Daily Double eligible)\nCancel  →  Fresh game — clear it`);
-        if (!keep) {
-            lastCorrectAnswerer = null;
-            db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
-        }
-    }
+    // Always clear lastCorrectAnswerer — First Question will set it at the start of every round
+    lastCorrectAnswerer = null;
+    db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
     // Write tiles to Firebase without DD flags — DDs are assigned in applySettings
     const tiles = pendingUploadTiles.map(t => { const c = { ...t }; delete c.dd; return c; });
     db.ref('boardState/categories').set(pendingUploadCategories);
@@ -2352,14 +2347,9 @@ function importFile(files) {
 }
 
 function resetGameState() {
-    // Ask about lastCorrectAnswerer before wiping state
-    if (lastCorrectAnswerer !== null) {
-        const keep = confirm(`Is this a continuation of the previous game?\n\nOK  →  Keep "${lastCorrectAnswerer}" as the last correct answerer (Daily Double eligible)\nCancel  →  Fresh game — clear it`);
-        if (!keep) {
-            lastCorrectAnswerer = null;
-            db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
-        }
-    }
+    // Always clear lastCorrectAnswerer — First Question will set it at the start of every round
+    lastCorrectAnswerer = null;
+    db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
     // Reset tiles, scores, log, and active clue; unlock DD settings; keep modal open
     gameStarted   = false;
     pendingGuess  = null;
