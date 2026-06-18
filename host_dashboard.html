@@ -377,7 +377,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v47</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v48</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -1177,10 +1177,13 @@ function updateFollowersOnly() {
 
 function disconnectTwitch() {
     // Only clear OAuth state — keep IRC WebSocket alive so chat still works without follower checks
+    const cachedLogin = twitchLogin; // capture before clearTwitchSession wipes it
     clearTwitchSession();
     document.getElementById('tw-connect').style.display   = '';
     document.getElementById('tw-connected').style.display = 'none';
     document.getElementById('tw-dot').classList.remove('on');
+    // Refresh chat status so the warning fires if this dashboard still owns chat
+    updateChatStatus(cachedLogin || '', isChatPrimary ? SESSION_ID : '');
     log('Twitch disconnected.');
 }
 
@@ -1551,8 +1554,12 @@ function shareSourceToChat(linkId) {
 }
 
 function sendChatMessage(text) {
-    if (!isChatPrimary) return; // only the primary host sends chat
-    if (!twitchToken || !twitchLogin) { log('Chat reply skipped: Twitch not connected.'); return; }
+    if (!isChatPrimary) return; // only the active chat dashboard sends messages
+    if (!twitchToken || !twitchLogin) {
+        showTwWarn('\u26a0\ufe0f Chat message not sent \u2014 Twitch is not connected. Reconnect your Twitch account to send messages.');
+        log('Chat reply skipped: Twitch not connected.');
+        return;
+    }
     const safe = String(text || '').replace(/[\r\n]+/g, ' ').trim();
     if (!safe) return;
     if (!tmiClient || tmiClient.readyState !== WebSocket.OPEN) {
