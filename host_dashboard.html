@@ -40,7 +40,8 @@
 
         /* ── Panels ── */
         .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; flex-shrink: 0; }
-        .ptitle { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 10px; display: flex; justify-content: flex-start; align-items: center; gap: 6px; }
+        .ptitle { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 10px; display: flex; justify-content: flex-start; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+        .ptitle:hover { color: var(--text); }
         .ptitle .panel-toggle, .ptitle > div:last-child { margin-left: auto; }
 
         /* ── Status ── */
@@ -86,6 +87,8 @@
         .bt:hover  { border-color: var(--blue); }
         .bt.played { opacity: 0.35; cursor: default; }
         .bt.active { border-color: #ffff5c; box-shadow: 0 0 6px rgba(255,255,92,0.35); }
+        #board-wrap.locked .bt:not(.played):not(.active) { opacity: 0.4; cursor: not-allowed; }
+        #board-wrap.locked .bt-review { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
         .bt-review { position: absolute; top: 2px; right: 2px; background: rgba(58,123,255,0.85); border: none; color: #fff; font-size: 0.55rem; padding: 2px 3px; border-radius: 2px; cursor: pointer; line-height: 1; z-index: 1; }
         .bt-review:hover { background: var(--blue); }
 
@@ -372,7 +375,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v45</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v46</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -837,6 +840,15 @@ function togglePanel(btn) {
         requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
     }
 }
+
+// Clicking anywhere on a ptitle (except interactive children) toggles the panel
+document.addEventListener('click', e => {
+    const ptitle = e.target.closest('.ptitle');
+    if (!ptitle) return;
+    if (e.target.closest('button, input, select, a, .screen-toggle')) return;
+    const toggleBtn = ptitle.querySelector('.panel-toggle');
+    if (toggleBtn) togglePanel(toggleBtn);
+});
 
 // ── SIDEBAR DRAG-AND-DROP ─────────────────────────────────────────────────────
 let dragSrc = null;
@@ -2190,9 +2202,11 @@ function renderBoard() {
     const numCats  = categories.length;
     const numRows  = tiles.length / numCats;
     const activeId = (activeClue?.status === 'active' || activeClue?.status === 'daily-double' || activeClue?.status === 'daily-double-active') ? activeClue.tileId : null;
+    const locked   = !!activeClue && activeClue.status !== 'inactive';
     const wrap     = document.getElementById('board-wrap');
 
     wrap.style.gridTemplateColumns = `repeat(${numCats}, 1fr)`;
+    wrap.classList.toggle('locked', locked);
     wrap.innerHTML = '';
 
     // Category headers
@@ -2221,11 +2235,11 @@ function renderBoard() {
             if (tile.played) {
                 const reviewBtn = document.createElement('button');
                 reviewBtn.className = 'bt-review';
-                reviewBtn.title = 'Review clue';
+                reviewBtn.title = locked ? 'Dismiss the current clue first' : 'Review clue';
                 reviewBtn.textContent = '👁';
-                reviewBtn.onclick = (e) => { e.stopPropagation(); reviewClue(tile); };
+                if (!locked) reviewBtn.onclick = (e) => { e.stopPropagation(); reviewClue(tile); };
                 d.appendChild(reviewBtn);
-            } else {
+            } else if (!locked) {
                 d.onclick = () => {
                     if (!gameStarted) {
                         gameStarted = true;
@@ -2253,6 +2267,8 @@ function renderBoard() {
                         });
                     }
                 };
+            } else {
+                d.title = 'Dismiss the current clue first';
             }
             wrap.appendChild(d);
         }
@@ -2479,6 +2495,12 @@ The board must have exactly ${cats} categories with creative, thematic titles.
 Each category must have exactly ${ques} clues ordered by difficulty (200, 400, 600, 800, 1000).
 Each clue needs five fields: "v" (point value as a number), "q" (the clue as a Jeopardy-style statement/description — do NOT phrase it as a question), "a" (the correct answer), "src" (the source name, e.g. "Wikipedia", "NASA", "Britannica"), "url" (a real, accurate URL to a page that supports the answer — prefer Wikipedia article URLs).
 Also include a "firstQuestion" field at the top level: a single warm-up clue (same q/a/category/src/url format, no v field) used before the game to seed the first correct guesser. Give it a fun, accessible category name like "Warm-Up" or something thematic.
+Content guidelines — strictly enforce these for every category name, clue, and answer:
+- All content must be appropriate for a general/all-ages audience.
+- No profanity, crude slang, or vulgar language of any kind (e.g. avoid words like "badass", "damn", "crap", or expletives even if commonly used informally).
+- No sexual, suggestive, or adult-only content.
+- No graphic violence or disturbing subject matter.
+- If a natural phrasing would be borderline, rephrase it cleanly (e.g. "Mighty Heroes" not "Badass Heroes", "Sharp Comebacks" not "Sick Burns").
 All facts must be accurate. IMPORTANT: Return ONLY valid JSON. Do not use quotation marks inside string values — rephrase the clue instead. If a title or phrase would normally use quotes, omit them or use alternative phrasing. Return ONLY raw JSON, no markdown or explanation:
 { "metadata": { "title": "${topic}" }, "firstQuestion": { "category": "Warm-Up", "q": "...", "a": "...", "src": "...", "url": "..." }, "board": [ { "category": "...", "clues": [ { "v": 200, "q": "...", "a": "...", "src": "...", "url": "..." } ] } ] }`;
     navigator.clipboard.writeText(prompt).then(() => {
