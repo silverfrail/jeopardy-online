@@ -114,35 +114,20 @@
         .podium-block.p2 { height: 160px; background: linear-gradient(180deg, #c0c0c0 0%, #707070 100%); border: 3px solid #d8d8d8; color: #1a1a1a; }
         .podium-block.p3 { height: 110px; background: linear-gradient(180deg, #cd7f32 0%, #7a4218 100%); border: 3px solid #e8a050; color: #1a0a00; }
 
-        /* ── Settings Gear ── */
-        #gear { position: fixed; bottom: 18px; right: 18px; font-size: 22px; cursor: pointer; opacity: 0.35; transition: opacity 0.2s; color: #fff; z-index: 50; user-select: none; }
-        #gear:hover { opacity: 1; }
-        #settings { display: none; position: fixed; bottom: 55px; right: 18px; background: #16162a; border: 2px solid var(--blue); padding: 14px; border-radius: 8px; color: #fff; z-index: 50; width: 210px; font-size: 0.82rem; }
-        #settings label { display: block; margin-bottom: 10px; }
-        #settings input { width: 100%; margin-top: 4px; background: #000; border: 1px solid #333; color: #fff; padding: 5px 7px; border-radius: 3px; font-family: inherit; }
     </style>
 </head>
 <body>
 
-<div id="gear" onclick="toggleSettings()">⚙️</div>
-<div id="settings">
-    <label>
-        Border (%)
-        <input type="text" id="border-in" oninput="setBorder(this.value)" placeholder="5%">
-    </label>
-    <label>
-        Max players shown
-        <input type="number" id="max-players" value="3" min="1" max="10" oninput="renderLeaderboard(lastScores)">
-    </label>
-</div>
-
 <div id="canvas">
     <div id="ticker-bar"><div id="ticker-text"></div></div>
     <div id="splash-overlay">
-        <div class="splash-title">Quiz Show!</div>
-        <div class="splash-subtitle" style="font-size:1rem;opacity:0.4;">(for legal reasons)</div>
-        <div class="splash-bar"></div>
-        <div class="splash-subtitle">Get ready to play</div>
+        <div id="splash-default" style="display:flex;flex-direction:column;align-items:center;gap:32px;">
+            <div class="splash-title">Quiz Show!</div>
+            <div class="splash-subtitle" style="font-size:1rem;opacity:0.4;">(for legal reasons)</div>
+            <div class="splash-bar"></div>
+            <div class="splash-subtitle">Get ready to play</div>
+        </div>
+        <img id="splash-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:contain;">
     </div>
     <div id="firstq-overlay">
         <div class="firstq-category" id="firstq-category"></div>
@@ -290,30 +275,7 @@ db.ref('boardState/hostSettings').on('value', snap => {
     }
 });
 
-// ── SETTINGS ──────────────────────────────────────────────────────────────────
-function toggleSettings() {
-    const s = document.getElementById('settings');
-    s.style.display = s.style.display === 'block' ? 'none' : 'block';
-}
 
-function setBorder(val) {
-    const v = val.trim();
-    const formatted = v.endsWith('%') ? v : (v ? v + '%' : '5%');
-    document.getElementById('border-in').value = formatted;
-    applyBorder(formatted);
-    localStorage.setItem('streamBorder', formatted);
-}
-
-function applyBorder(val) {
-    const canvas = document.getElementById('canvas');
-    canvas.style.padding = val;
-}
-
-window.addEventListener('load', () => {
-    const b = localStorage.getItem('streamBorder') || '5%';
-    document.getElementById('border-in').value = b;
-    applyBorder(b);
-});
 
 // ── BOARD LISTENER ────────────────────────────────────────────────────────────
 db.ref('boardState').on('value', snap => {
@@ -579,7 +541,21 @@ db.ref('boardState/firstQuestion').on('value', snap => {
         } else { fqSrc.style.display = 'none'; }
     }
 });
-
+// ── SPLASH IMAGE LISTENER ───────────────────────────────────────────────
+db.ref('boardState/splashImage').on('value', snap => {
+    const val = snap.val();
+    const img = document.getElementById('splash-img');
+    const def = document.getElementById('splash-default');
+    if (val) {
+        img.src = val;
+        img.style.display = '';
+        if (def) def.style.display = 'none';
+    } else {
+        img.src = '';
+        img.style.display = 'none';
+        if (def) def.style.display = 'flex';
+    }
+});
 // ── OBS REFRESH LISTENER ──────────────────────────────────────────────────────
 db.ref('refreshTrigger').on('value', snap => {
     // Skip the initial value on page load to avoid immediate reload loop

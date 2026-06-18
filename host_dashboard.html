@@ -396,6 +396,18 @@
                     <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
                 </div>
                 <div style="color:var(--dim);font-size:0.8rem;padding:8px 0;">Placeholder splash screen shown to viewers while the game is not in progress.</div>
+                <div style="margin-top:4px;">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+                        <input type="file" id="splash-file-in" accept="image/*" style="display:none" onchange="handleSplashFile(this)">
+                        <button class="btn-sec btn-sm" onclick="document.getElementById('splash-file-in').click()">&#128193; Upload Image</button>
+                        <input type="text" id="splash-url-in" placeholder="...or paste image URL" style="flex:1;background:#0d0d1a;border:1px solid var(--border);color:#fff;padding:5px 8px;border-radius:4px;font-size:0.8rem;font-family:inherit;">
+                        <button class="btn-sec btn-sm" onclick="applySplashUrl()">Apply</button>
+                    </div>
+                    <div id="splash-thumb-wrap" style="display:none;margin-bottom:6px;">
+                        <img id="splash-thumb" src="" alt="Current splash" style="max-width:100%;max-height:80px;object-fit:contain;border-radius:4px;border:1px solid var(--border);">
+                    </div>
+                    <button id="splash-clear-btn" class="btn-red btn-sm" onclick="clearSplashImage()" style="display:none;width:100%;">&#10005; Remove image — use default</button>
+                </div>
             </div>
 
             <!-- First Question -->
@@ -758,6 +770,55 @@ function listenFirstQuestion() {
     });
 }
 
+function listenSplashImage() {
+    db.ref('boardState/splashImage').on('value', snap => {
+        const val      = snap.val();
+        const thumb    = document.getElementById('splash-thumb');
+        const thumbWrap = document.getElementById('splash-thumb-wrap');
+        const clearBtn = document.getElementById('splash-clear-btn');
+        const urlIn    = document.getElementById('splash-url-in');
+        if (val) {
+            if (thumb)    { thumb.src = val; thumbWrap.style.display = ''; }
+            if (clearBtn)   clearBtn.style.display = '';
+            if (urlIn && val.startsWith('http')) urlIn.value = val;
+        } else {
+            if (thumb)    { thumb.src = ''; thumbWrap.style.display = 'none'; }
+            if (clearBtn)   clearBtn.style.display = 'none';
+        }
+    });
+}
+
+function handleSplashFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+        alert('Image is too large (max 4 MB). Please compress it or paste a URL instead.');
+        input.value = '';
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+        db.ref('boardState/splashImage').set(e.target.result);
+        log('Splash image uploaded.');
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+function applySplashUrl() {
+    const url = (document.getElementById('splash-url-in')?.value || '').trim();
+    if (!url) return;
+    db.ref('boardState/splashImage').set(url);
+    log('Splash image URL applied.');
+}
+
+function clearSplashImage() {
+    db.ref('boardState/splashImage').set(null);
+    const urlIn = document.getElementById('splash-url-in');
+    if (urlIn) urlIn.value = '';
+    log('Splash image cleared. Using default.');
+}
+
 function togglePanel(btn) {
     const panel = btn.closest('.panel, .log-panel');
     const collapsed = panel.classList.toggle('collapsed');
@@ -935,6 +996,7 @@ function initDashboard() {
     initPanelDrag();                // sidebar drag-and-drop reordering
     listenActiveScreen();           // sync preview screen selection
     listenFirstQuestion();          // restore first question from Firebase on load
+    listenSplashImage();            // sync custom splash image
     initTMI();  // always listen to chat, regardless of OAuth state
     // Optimistically restore Twitch UI if cached credentials exist
     // (checkTwitchSession will validate async and revert if expired)
