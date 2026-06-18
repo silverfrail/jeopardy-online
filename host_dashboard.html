@@ -372,7 +372,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v41</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v42</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -408,22 +408,24 @@
                     First Question
                     <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
                 </div>
-                <div id="fq-no-data" style="color:var(--dim);font-size:0.8rem;padding:8px 0;">No question loaded. Upload a board with a <code>firstQuestion</code> field.</div>
-                <div id="fq-data" style="display:none;">
-                    <div class="ac-q" id="fq-question" style="margin-bottom:6px;"></div>
-                    <div class="ac-albl">Correct Answer (host only)</div>
-                    <div class="ac-ans" id="fq-answer" style="margin-bottom:6px;"></div>
-                    <div id="fq-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-bottom:10px;">Source: <a id="fq-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a> <button id="fq-src-share" onclick="shareSourceToChat('fq-src-link')" title="Share URL to Twitch chat" style="background:none;border:none;cursor:pointer;color:var(--dim);font-size:0.75rem;padding:0 2px;vertical-align:middle;">↗</button></div>
-                    <div id="fq-pg-panel" style="display:none;background:#1a1500;border:2px solid var(--yellow);border-radius:6px;padding:12px;margin-top:4px;">
-                        <div class="pg-who" id="fq-pg-who"></div>
-                        <div class="pg-txt" id="fq-pg-txt"></div>
-                        <div class="pg-mtch" id="fq-pg-mtch"></div>
-                        <div class="pg-acts">
-                            <button class="btn-ok"  style="flex:1" onclick="judgeFirstQuestion(true)">✓ Correct</button>
-                            <button class="btn-red" style="flex:1" onclick="judgeFirstQuestion(false)">✗ Wrong</button>
-                        </div>
-                        <div id="fq-pg-queue" style="font-size:0.72rem;color:var(--dim);margin-top:8px;display:none;"></div>
+                <label style="font-size:0.75rem;color:var(--dim);display:block;margin:6px 0 3px;">Question <span style="opacity:0.6;">— shown to viewers</span></label>
+                <textarea id="fq-q-input" rows="3" placeholder="Type the question here..." style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid var(--border);color:#fff;padding:7px 9px;border-radius:4px;font-family:inherit;font-size:0.9rem;resize:vertical;margin-bottom:8px;"></textarea>
+                <label style="font-size:0.75rem;color:var(--dim);display:block;margin-bottom:3px;">Answer <span style="opacity:0.6;">— host only</span></label>
+                <input type="text" id="fq-a-input" placeholder="Correct answer..." style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid var(--border);color:#fff;padding:7px 9px;border-radius:4px;font-family:inherit;font-size:0.9rem;margin-bottom:8px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <button class="btn-ok" style="flex:1" onclick="pushCustomFirstQuestion()">&#8593; Push to Preview</button>
+                    <button id="fq-restore-btn" class="btn-sec btn-sm" onclick="restoreBoardFirstQuestion()" style="display:none;" title="Restore original board question">&#8635; Board Q</button>
+                </div>
+                <div id="fq-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-bottom:10px;">Source: <a id="fq-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a> <button id="fq-src-share" onclick="shareSourceToChat('fq-src-link')" title="Share URL to Twitch chat" style="background:none;border:none;cursor:pointer;color:var(--dim);font-size:0.75rem;padding:0 2px;vertical-align:middle;">&#8599;</button></div>
+                <div id="fq-pg-panel" style="display:none;background:#1a1500;border:2px solid var(--yellow);border-radius:6px;padding:12px;margin-top:4px;">
+                    <div class="pg-who" id="fq-pg-who"></div>
+                    <div class="pg-txt" id="fq-pg-txt"></div>
+                    <div class="pg-mtch" id="fq-pg-mtch"></div>
+                    <div class="pg-acts">
+                        <button class="btn-ok"  style="flex:1" onclick="judgeFirstQuestion(true)">&#10003; Correct</button>
+                        <button class="btn-red" style="flex:1" onclick="judgeFirstQuestion(false)">&#10007; Wrong</button>
                     </div>
+                    <div id="fq-pg-queue" style="font-size:0.72rem;color:var(--dim);margin-top:8px;display:none;"></div>
                 </div>
             </div>
 
@@ -438,6 +440,20 @@
                     <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button>
                 </div>
                 <div id="board-wrap"></div>
+            </div>
+
+            <!-- Podium -->
+            <div class="panel collapsed" id="podium-panel">
+                <div class="ptitle">
+                    <span class="screen-toggle" onclick="setActiveScreen('podium')" title="Show podium on preview">
+                        <span class="screen-toggle-track" id="screen-toggle-podium"></span>
+                        <span class="screen-toggle-label">LIVE</span>
+                    </span>
+                    Podium
+                    <button class="panel-toggle" onclick="togglePanel(this)" title="Expand">&#9658;</button>
+                </div>
+                <div style="color:var(--dim);font-size:0.8rem;padding:8px 0 4px;">Displays top 3 players. Flip to this screen when the game ends.</div>
+                <div id="podium-preview"></div>
             </div>
 
             <!-- Active Clue Panel (below board so grid doesn't shift on dismiss) -->
@@ -568,8 +584,11 @@
                     </div>
                 </div>
                 <textarea id="json-in" rows="7" placeholder="Paste AI-generated JSON here..."></textarea>
-                <div class="row" style="margin-top:8px;">
-                    <button class="btn-sec" onclick="openModal('prompt-modal')">Gen Prompt</button>
+                <div class="row" style="margin-top:8px;gap:12px;align-items:flex-start;">
+                    <div style="display:flex;flex-direction:column;align-items:flex-start;">
+                        <button class="btn-sec" onclick="openModal('prompt-modal')">Gen Prompt</button>
+                        <a href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer" style="font-size:0.78rem;color:var(--blue);margin-top:6px;text-decoration:underline;">Gemini</a>
+                    </div>
                     <button class="btn-ok"  onclick="uploadBoard()">Upload Board</button>
                 </div>
             </div>
@@ -665,6 +684,7 @@ let ddWagerRemaining    = 0;
 let lastCorrectAnswerer  = null;  // username of most recent correct answerer
 let firstQuestionData    = null;  // { question, answer, category } — answer host-only, never in Firebase
 let pendingFirstQuestion = null;  // staging area between uploadBoard() and commitUpload()
+let boardFirstQuestion   = null;  // original board firstQuestion, kept for the restore button
 let currentScreen        = 'splash'; // locally tracked active preview screen
 let leaderboardScores   = {};    // cached scores for wager limit calc
 let gameStarted         = false; // true once first tile is clicked; locks DD settings
@@ -714,6 +734,8 @@ function updateScreenToggles(screen) {
     splashTrack.classList.toggle('on', screen === 'splash');
     if (firstqTrack) firstqTrack.classList.toggle('on', screen === 'firstq');
     boardTrack.classList.toggle('on',  screen === 'board');
+    const podiumTrack = document.getElementById('screen-toggle-podium');
+    if (podiumTrack) podiumTrack.classList.toggle('on', screen === 'podium');
 }
 
 function listenActiveScreen() {
@@ -1921,27 +1943,45 @@ function updateFQQueueIndicator() {
 }
 
 function updateFirstQuestionCard() {
-    const noData = document.getElementById('fq-no-data');
-    const dataEl = document.getElementById('fq-data');
-    if (!noData || !dataEl) return;
+    const qInput     = document.getElementById('fq-q-input');
+    const aInput     = document.getElementById('fq-a-input');
+    const restoreBtn = document.getElementById('fq-restore-btn');
+    if (!qInput || !aInput) return;
     if (firstQuestionData) {
-        noData.style.display = 'none';
-        dataEl.style.display = '';
-        document.getElementById('fq-question').textContent = firstQuestionData.question;
-        document.getElementById('fq-answer').textContent   = firstQuestionData.answer;
-        const fqSrc = document.getElementById('fq-src');
+        qInput.value = firstQuestionData.question || '';
+        aInput.value = firstQuestionData.answer   || '';
+        const fqSrc     = document.getElementById('fq-src');
         const fqSrcLink = document.getElementById('fq-src-link');
         if (fqSrc && fqSrcLink) {
             if (firstQuestionData.src || firstQuestionData.url) {
                 fqSrcLink.textContent = firstQuestionData.src || firstQuestionData.url;
-                fqSrcLink.href = firstQuestionData.url || '#';
-                fqSrc.style.display = '';
+                fqSrcLink.href        = firstQuestionData.url || '#';
+                fqSrc.style.display   = '';
             } else { fqSrc.style.display = 'none'; }
         }
-    } else {
-        noData.style.display = '';
-        dataEl.style.display = 'none';
     }
+    if (restoreBtn) restoreBtn.style.display = boardFirstQuestion ? '' : 'none';
+}
+
+function pushCustomFirstQuestion() {
+    const q = (document.getElementById('fq-q-input')?.value || '').trim();
+    const a = (document.getElementById('fq-a-input')?.value || '').trim();
+    if (!q) { alert('Enter a question before pushing to preview.'); return; }
+    const data = { question: q, answer: a, category: firstQuestionData?.category || '' };
+    firstQuestionData = data;
+    db.ref('boardState/firstQuestion').set(data);
+    log(`First Question pushed: "${q}"`);
+}
+
+function restoreBoardFirstQuestion() {
+    if (!boardFirstQuestion) return;
+    firstQuestionData = { ...boardFirstQuestion };
+    db.ref('boardState/firstQuestion').set({
+        question: boardFirstQuestion.question,
+        answer:   boardFirstQuestion.answer,
+        category: boardFirstQuestion.category
+    });
+    log('First Question restored from board.');
 }
 
 function dismissClue(reason) {
@@ -1981,6 +2021,7 @@ function revealAnswer() {
     db.ref('activeClue').set({
         status:   'answer-reveal',
         answer,
+        question: activeClue.question || '',
         category: activeClue.category || '',
         value:    activeClue.value    || 0,
         src:      activeClue.src      || '',
@@ -2214,6 +2255,14 @@ function initListeners() {
         const scores = snap.val() || {};
         leaderboardScores = scores;  // cache for DD wager limit calculations
         const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        // Update podium panel preview
+        const _podPrev = document.getElementById('podium-preview');
+        if (_podPrev) {
+            const _lbls = ['\uD83E\uDEAF','\uD83E\uDD48','\uD83E\uDD49'];
+            _podPrev.innerHTML = sorted.slice(0,3).length
+                ? sorted.slice(0,3).map(([n,s],i)=>`<div style="font-size:0.82rem;padding:2px 0;">${_lbls[i]} <strong>${n}</strong> \u2014 $${Number(s).toLocaleString()}</div>`).join('')
+                : '<div style="color:var(--dim);font-size:0.8rem;">No scores yet.</div>';
+        }
         const roster = document.getElementById('roster');
         roster.innerHTML = '';
 
@@ -2338,7 +2387,8 @@ function commitUpload(resetScores) {
         log('Board uploaded. Scores kept.');
     }
     db.ref('activeClue').set({ status: 'inactive', tileId: null });
-    firstQuestionData = pendingFirstQuestion;
+    firstQuestionData  = pendingFirstQuestion;
+    boardFirstQuestion = pendingFirstQuestion;  // preserve for restore feature
     db.ref('boardState/firstQuestion').set(firstQuestionData
         ? { question: firstQuestionData.question, answer: firstQuestionData.answer, category: firstQuestionData.category }
         : null);
