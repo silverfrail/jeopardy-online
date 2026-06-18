@@ -377,7 +377,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v48</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v49</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -553,24 +553,23 @@
                 <div id="tw-warn-banner" class="tw-warn-banner"></div>
 
                 <!-- Followers only toggle — always visible -->
-                <div class="toggle-row" style="margin-bottom:10px;">
-                    <input type="checkbox" id="followers-only" checked onchange="updateFollowersOnly()">
-                    <label for="followers-only" style="color:var(--dim)">Followers only</label>
-                    <span class="tip" data-tip="When checked, only viewers who follow your Twitch channel can submit guesses. Requires connecting your Twitch account below.">?</span>
+                <!-- Auth section — always visible -->
+                <div id="tw-connect">
+                    <button onclick="startTwitchAuth()" style="width:100%">Connect Twitch Account</button>
+                    <div style="font-size:0.75rem;color:var(--dim);margin-top:8px;">Required for follower verification and chat messages.</div>
+                </div>
+                <div id="tw-connected" style="display:none">
+                    <div style="font-size:0.82rem;color:var(--green);margin-bottom:6px;">&#9679; Connected as <strong id="tw-user"></strong></div>
+                    <div style="font-size:0.78rem;color:var(--dim);">Channel: <strong id="tw-chan"></strong></div>
+                    <div style="font-size:0.78rem;color:var(--dim);margin-top:3px;">Approved this session: <strong id="appr-count">0</strong></div>
+                    <button class="btn-sec btn-sm" style="margin-top:8px" onclick="disconnectTwitch()">Disconnect</button>
                 </div>
 
-                <!-- Auth section — hidden when followers-only is off -->
-                <div id="tw-auth-section">
-                    <div id="tw-connect">
-                        <button onclick="startTwitchAuth()" style="width:100%">Connect Twitch Account</button>
-                        <div style="font-size:0.75rem;color:var(--dim);margin-top:8px;">Required for follower verification.</div>
-                    </div>
-                    <div id="tw-connected" style="display:none">
-                        <div style="font-size:0.82rem;color:var(--green);margin-bottom:6px;">● Connected as <strong id="tw-user"></strong></div>
-                        <div style="font-size:0.78rem;color:var(--dim);">Channel: <strong id="tw-chan"></strong></div>
-                        <div style="font-size:0.78rem;color:var(--dim);margin-top:3px;">Approved this session: <strong id="appr-count">0</strong></div>
-                        <button class="btn-sec btn-sm" style="margin-top:8px" onclick="disconnectTwitch()">Disconnect</button>
-                    </div>
+                <!-- Followers only — always visible, disabled until Twitch connected -->
+                <div class="toggle-row" style="margin-top:10px;margin-bottom:10px;">
+                    <input type="checkbox" id="followers-only" checked onchange="updateFollowersOnly()" disabled>
+                    <label for="followers-only" id="followers-only-label" style="color:var(--dim);opacity:0.45;">Followers only</label>
+                    <span class="tip" data-tip="When checked, only viewers who follow your Twitch channel can submit guesses. Connect your Twitch account above to enable this toggle.">?</span>
                 </div>
             </div>
 
@@ -1125,6 +1124,7 @@ async function setupTwitch(loginName) {
     // Reconnect IRC as authenticated so we can send chat replies when needed.
     initTMI();
     updateChatStatus(twitchLogin, isChatPrimary ? SESSION_ID : ''); // refresh label now that we're connected
+    refreshFollowersOnlyState();
     log('Twitch session active.');
 }
 
@@ -1141,6 +1141,7 @@ function handleTwitchExpiry() {
     document.getElementById('tw-connected').style.display = 'none';
     document.getElementById('tw-dot').classList.remove('on');
     updateChatStatus('', '');
+    refreshFollowersOnlyState();
     log('Twitch token expired \u2014 click Connect to re-authenticate.');
 }
 
@@ -1164,10 +1165,16 @@ function addTickerRow(text) {
 
 function updateGuessCommand() {} // stub — replaced by applySettings
 
+function refreshFollowersOnlyState() {
+    const cb    = document.getElementById('followers-only');
+    const label = document.getElementById('followers-only-label');
+    const hasTwitch = !!(twitchToken && twitchLogin);
+    if (cb)    { cb.disabled = !hasTwitch; }
+    if (label) { label.style.opacity = hasTwitch ? '' : '0.45'; }
+}
+
 function updateFollowersOnly() {
     const checked = document.getElementById('followers-only').checked;
-    document.getElementById('tw-auth-section').style.display = checked ? '' : 'none';
-    if (!checked && twitchToken) disconnectTwitch();
     // Sync change to Firebase so all dashboards agree
     log(`Followers-only toggled → ${checked}. Writing to Firebase…`);
     db.ref('boardState/hostSettings/followersOnly').set(checked)
@@ -1184,6 +1191,7 @@ function disconnectTwitch() {
     document.getElementById('tw-dot').classList.remove('on');
     // Refresh chat status so the warning fires if this dashboard still owns chat
     updateChatStatus(cachedLogin || '', isChatPrimary ? SESSION_ID : '');
+    refreshFollowersOnlyState();
     log('Twitch disconnected.');
 }
 
@@ -1296,11 +1304,10 @@ function listenFollowersOnly() {
         if (val === null) return; // not yet written
         const cb = document.getElementById('followers-only');
         if (!cb) return;
-        // Only sync checkbox and auth-section visibility — never disconnect Twitch from a remote change
+        // Only sync checkbox value — never disconnect Twitch or change interactivity from a remote change
         if (cb.checked !== val) {
             log(`Syncing checkbox to ${val}`);
             cb.checked = val;
-            document.getElementById('tw-auth-section').style.display = val ? '' : 'none';
         }
     });
 }
