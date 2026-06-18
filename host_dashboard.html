@@ -372,7 +372,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v42</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v45</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -697,6 +697,7 @@ let lastCorrectAnswerer  = null;  // username of most recent correct answerer
 let firstQuestionData    = null;  // { question, answer, category } — answer host-only, never in Firebase
 let pendingFirstQuestion = null;  // staging area between uploadBoard() and commitUpload()
 let boardFirstQuestion   = null;  // original board firstQuestion, kept for the restore button
+let pendingSplashData    = null;  // file data buffered until Apply is clicked
 let currentScreen        = 'splash'; // locally tracked active preview screen
 let leaderboardScores   = {};    // cached scores for wager limit calc
 let gameStarted         = false; // true once first tile is clicked; locks DD settings
@@ -798,21 +799,26 @@ function handleSplashFile(input) {
     }
     const reader = new FileReader();
     reader.onload = e => {
-        db.ref('boardState/splashImage').set(e.target.result);
-        log('Splash image uploaded.');
+        pendingSplashData = e.target.result;
+        // Show thumbnail locally — don't touch Firebase until Apply is clicked
+        const thumb     = document.getElementById('splash-thumb');
+        const thumbWrap = document.getElementById('splash-thumb-wrap');
+        if (thumb) { thumb.src = pendingSplashData; thumbWrap.style.display = ''; }
     };
     reader.readAsDataURL(file);
     input.value = '';
 }
 
 function applySplashUrl() {
-    const url = (document.getElementById('splash-url-in')?.value || '').trim();
-    if (!url) return;
-    db.ref('boardState/splashImage').set(url);
-    log('Splash image URL applied.');
+    const data = pendingSplashData || (document.getElementById('splash-url-in')?.value || '').trim();
+    if (!data) return;
+    db.ref('boardState/splashImage').set(data);
+    pendingSplashData = null;
+    log('Splash image applied.');
 }
 
 function clearSplashImage() {
+    pendingSplashData = null;
     db.ref('boardState/splashImage').set(null);
     const urlIn = document.getElementById('splash-url-in');
     if (urlIn) urlIn.value = '';
