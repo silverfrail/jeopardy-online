@@ -168,12 +168,14 @@
         .log-entry { margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 4px; }
         .log-time { color: var(--dim); margin-right: 6px; font-family: monospace; }
 
-        /* ── Chat Primary Badge ── */
-        .chat-role-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-        .chat-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 99px; letter-spacing: 0.04em; }
-        .chat-badge.primary { background: rgba(0,200,100,0.15); color: #00c864; border: 1px solid rgba(0,200,100,0.35); }
-        .chat-badge.helper  { background: rgba(255,255,255,0.06); color: var(--dim); border: 1px solid var(--border); }
-        .claim-btn { font-size: 0.72rem; padding: 3px 8px; background: rgba(90,90,180,0.18); border: 1px solid var(--border); color: var(--dim); border-radius: 5px; cursor: pointer; }
+        /* ── Chat Active Indicator ── */
+        .chat-role-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .chat-active-label { font-size: 0.76rem; color: var(--dim); flex: 1; min-width: 0; }
+        .chat-active-label .chat-user { font-weight: 700; }
+        .chat-active-label .chat-user.is-me  { color: #00c864; }
+        .chat-active-label .chat-user.is-other { color: var(--yellow); }
+        .chat-active-label .chat-user.is-none  { color: var(--dim); }
+        .claim-btn { font-size: 0.72rem; padding: 3px 8px; background: rgba(90,90,180,0.18); border: 1px solid var(--border); color: var(--dim); border-radius: 5px; cursor: pointer; white-space: nowrap; }
         .claim-btn:hover { background: rgba(90,90,180,0.35); color: var(--text); }
         .tw-warn-banner { display:none; margin-top:8px; padding:8px 10px; background:rgba(255,170,0,0.12); border:1px solid rgba(255,170,0,0.4); border-radius:6px; font-size:0.76rem; color:#ffaa00; line-height:1.4; }
 
@@ -375,7 +377,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v46</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v47</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -543,10 +545,10 @@
             <div class="panel" data-panel-id="twitch">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Twitch <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button></div>
 
-                <!-- Chat host role indicator -->
+                <!-- Chat active indicator -->
                 <div class="chat-role-row">
-                    <span id="chat-badge" class="chat-badge helper">Helper</span>
-                    <button id="claim-btn" class="claim-btn" onclick="claimChatPrimary()" style="display:none">Claim Primary</button>
+                    <span class="chat-active-label">Chat: <span id="chat-active-name" class="chat-user is-none">&mdash;</span></span>
+                    <button id="claim-btn" class="claim-btn" onclick="claimChatPrimary()" style="display:none">Claim Chat</button>
                 </div>
                 <div id="tw-warn-banner" class="tw-warn-banner"></div>
 
@@ -1122,7 +1124,7 @@ async function setupTwitch(loginName) {
     if (twitchLogin) localStorage.setItem('twitch_login', twitchLogin);
     // Reconnect IRC as authenticated so we can send chat replies when needed.
     initTMI();
-    updateChatBadge(); // clear any Twitch warning now that we're connected
+    updateChatStatus(twitchLogin, isChatPrimary ? SESSION_ID : ''); // refresh label now that we're connected
     log('Twitch session active.');
 }
 
@@ -1138,7 +1140,7 @@ function handleTwitchExpiry() {
     document.getElementById('tw-connect').style.display   = '';
     document.getElementById('tw-connected').style.display = 'none';
     document.getElementById('tw-dot').classList.remove('on');
-    updateChatBadge();
+    updateChatStatus('', '');
     log('Twitch token expired \u2014 click Connect to re-authenticate.');
 }
 
@@ -1182,10 +1184,10 @@ function disconnectTwitch() {
     log('Twitch disconnected.');
 }
 
-// ── MULTI-HOST: Chat Primary ─────────────────────────────────────────────────
-// Firebase node: boardState/hostSettings/chatPrimary = SESSION_ID of current owner, or null.
-// First dashboard to open claims it. The other becomes helper and shows "Claim" button.
-// Owner is released on page unload; helper can steal it at any time.
+// ── MULTI-HOST: Chat Active ──────────────────────────────────────────────────
+// Firebase node: boardState/hostSettings/chatPrimary = { sessionId, username } | null
+// First dashboard to open claims it. Others can claim it at any time.
+// Released on page unload. All dashboards see who owns it by username.
 
 function showTwWarn(msg) {
     const el = document.getElementById('tw-warn-banner');
@@ -1198,25 +1200,40 @@ function hideTwWarn() {
     if (el) el.style.display = 'none';
 }
 
-function updateChatBadge() {
-    const badge    = document.getElementById('chat-badge');
+function updateChatStatus(ownerUsername, ownerSessionId) {
+    const nameEl   = document.getElementById('chat-active-name');
+    const hdrEl    = document.getElementById('hdr-chat-user');
     const claimBtn = document.getElementById('claim-btn');
     const hasTwitch = !!(twitchToken && twitchLogin);
-    if (isChatPrimary) {
-        badge.textContent  = '● Chat Primary';
-        badge.className    = 'chat-badge primary';
+
+    if (ownerSessionId === SESSION_ID) {
+        // This dashboard owns chat
+        const label = `@${ownerUsername}`;
+        nameEl.textContent = label + ' (you)';
+        nameEl.className   = 'chat-user is-me';
+        if (hdrEl) { hdrEl.textContent = label; hdrEl.style.color = '#00c864'; }
         claimBtn.style.display = 'none';
         if (!hasTwitch) {
-            showTwWarn('⚠️ You are Chat Primary but Twitch is not connected. Follower checks and chat messages will not work. Connect your Twitch account above.');
+            showTwWarn('\u26a0\ufe0f You have chat but Twitch is not connected. Chat messages and follower checks will not work.');
         } else {
             hideTwWarn();
         }
+    } else if (ownerUsername) {
+        // Someone else owns chat
+        const label = `@${ownerUsername}`;
+        nameEl.textContent = label;
+        nameEl.className   = 'chat-user is-other';
+        if (hdrEl) { hdrEl.textContent = label; hdrEl.style.color = 'var(--yellow)'; }
+        claimBtn.style.display = hasTwitch ? '' : 'none';
+        hideTwWarn();
     } else {
-        badge.textContent  = 'Chat Helper';
-        badge.className    = 'chat-badge helper';
+        // Nobody owns chat
+        nameEl.textContent = '\u2014';
+        nameEl.className   = 'chat-user is-none';
+        if (hdrEl) { hdrEl.textContent = '\u2014'; hdrEl.style.color = 'var(--dim)'; }
         claimBtn.style.display = hasTwitch ? '' : 'none';
         if (!hasTwitch) {
-            showTwWarn('⚠️ Connect your Twitch account to claim Chat Primary.');
+            showTwWarn('\u26a0\ufe0f Connect your Twitch account to claim chat.');
         } else {
             hideTwWarn();
         }
@@ -1225,13 +1242,13 @@ function updateChatBadge() {
 
 function claimChatPrimary() {
     if (!twitchToken || !twitchLogin) {
-        showTwWarn('⚠️ Connect your Twitch account before claiming Chat Primary.');
+        showTwWarn('\u26a0\ufe0f Connect your Twitch account before claiming chat.');
         return;
     }
-    chatPrimaryRef.set(SESSION_ID).then(() => {
+    chatPrimaryRef.set({ sessionId: SESSION_ID, username: twitchLogin }).then(() => {
         isChatPrimary = true;
-        updateChatBadge();
-        log('This dashboard is now Chat Primary.');
+        updateChatStatus(twitchLogin, SESSION_ID);
+        log(`This dashboard (@${twitchLogin}) now has chat.`);
     });
 }
 
@@ -1242,27 +1259,28 @@ function releaseChatPrimary() {
 
 function listenChatPrimary() {
     chatPrimaryRef.on('value', snap => {
-        const owner = snap.val();
-        if (owner === null) {
+        const data = snap.val();
+        if (!data) {
             // Nobody owns it — claim automatically
             chatPrimaryRef.transaction(current => {
-                if (current === null) return SESSION_ID;
-                return current; // someone beat us to it
+                if (current === null) return { sessionId: SESSION_ID, username: twitchLogin || '' };
+                return current;
             }).then(result => {
-                if (result.snapshot.val() === SESSION_ID) {
+                const val = result.snapshot.val();
+                if (val?.sessionId === SESSION_ID) {
                     isChatPrimary = true;
-                    log('This dashboard is now Chat Primary (auto-claimed).');
+                    log(`This dashboard (@${twitchLogin || 'unconnected'}) auto-claimed chat.`);
                     if (!twitchToken || !twitchLogin) {
-                        showTwWarn('⚠️ Auto-claimed Chat Primary but Twitch is not connected. Connect your Twitch account to enable follower checks and chat replies.');
+                        showTwWarn('\u26a0\ufe0f You have chat but Twitch is not connected. Connect your Twitch account to enable follower checks and chat replies.');
                     }
                 } else {
                     isChatPrimary = false;
                 }
-                updateChatBadge();
+                updateChatStatus(val?.username || '', val?.sessionId || '');
             });
         } else {
-            isChatPrimary = (owner === SESSION_ID);
-            updateChatBadge();
+            isChatPrimary = (data.sessionId === SESSION_ID);
+            updateChatStatus(data.username || '', data.sessionId || '');
         }
     });
 }
