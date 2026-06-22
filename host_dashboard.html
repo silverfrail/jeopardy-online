@@ -404,7 +404,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v56</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v57</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -1819,7 +1819,7 @@ function setClueUI(clue) {
         document.getElementById('dd-cat').innerText    = clue.category || '';
         document.getElementById('dd-val').innerText    = `$${clue.value}`;
         document.getElementById('dd-player').innerText = clue.ddPlayer || '';
-        const lim = calcWagerLimits(clue.ddPlayer || '');
+        const lim = calcWagerLimits(clue.ddPlayer || '', clue.value);
         document.getElementById('dd-min').innerText = `$${lim.min}`;
         document.getElementById('dd-max').innerText = `$${lim.max}`;
         return;
@@ -2226,12 +2226,11 @@ function adjustScore(name, amount) {
 }
 
 // ── DAILY DOUBLE HELPERS ──────────────────────────────────────────────────────
-function calcWagerLimits(username) {
+function calcWagerLimits(username, tileValue) {
     const score = leaderboardScores[username] || 0;
-    if (score >= 0) return { min: 200, max: Math.max(200, score) };
-    // Negative score: player may bet any amount from $200 up to their debt (or $200 if debt is smaller)
-    const debt = Math.abs(score);
-    return { min: 200, max: Math.max(200, debt) };
+    if (score > 0) return { min: 1, max: Math.max(1, score) };
+    // Zero or negative score: max is the tile's face value
+    return { min: 1, max: Math.max(1, tileValue || 0) };
 }
 
 function startWagerTimer(player, timeout) {
@@ -2266,7 +2265,7 @@ function clearWagerTimer() {
 
 function processDDWager(username, amtStr) {
     if (!activeClue || activeClue.status !== 'daily-double') return;
-    const { min, max } = calcWagerLimits(username);
+    const { min, max } = calcWagerLimits(username, activeClue.value);
     const amt = parseInt(amtStr, 10);
     if (isNaN(amt) || amt < min || amt > max) {
         sendChatMessage(`@${username} Invalid wager. Min: $${min}, Max: $${max}. Type !wager [amount].`);
@@ -2417,7 +2416,7 @@ function initListeners() {
                 lastClueStatus   = 'daily-double';
                 clueScorers = []; // reset scorer list for new DD
                 startWagerTimer(data.ddPlayer, data.ddWagerTimeout);
-                const lim = calcWagerLimits(data.ddPlayer || '');
+                const lim = calcWagerLimits(data.ddPlayer || '', data.value);
                 sendChatMessage(`@${data.ddPlayer} You hit a Daily Double! Type !wager [amount]. Min: $${lim.min}, Max: $${lim.max}. You have ${data.ddWagerTimeout} seconds!`);
             }
         } else {
