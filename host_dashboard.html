@@ -404,7 +404,7 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v59</span>
+        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v60</span>
         <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
@@ -726,6 +726,7 @@ let ddWagerTimeout      = 60;    // seconds to wait for !wager before skip
 let ddWagerHandle       = null;  // setInterval handle for wager countdown
 let ddWagerRemaining    = 0;
 let lastCorrectAnswerer  = null;  // username of most recent correct answerer
+let lastCorrectTileId    = null;  // tile id of most recent correctly answered clue
 let firstQuestionData    = null;  // { question, answer, category } — answer host-only, never in Firebase
 let pendingFirstQuestion = null;  // staging area between uploadBoard() and commitUpload()
 let boardFirstQuestion   = null;  // original board firstQuestion, kept for the restore button
@@ -1423,6 +1424,13 @@ function listenTimerSettings() {
                 changed = true;
             }
         }
+        if (val.lastCorrectTileId !== undefined) {
+            const incoming = val.lastCorrectTileId ?? null;
+            if (lastCorrectTileId === null && incoming !== null) {
+                lastCorrectTileId = incoming;
+                changed = true;
+            }
+        }
         if (!changed) return;
         log(`Settings synced. Timer: ${timerEnabled ? timerSeconds + 's' : 'off'}. DD: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
         // If the settings modal is open, update its inputs to reflect the new values
@@ -1983,9 +1991,11 @@ function judgeGuess(correct) {
         const clueContext = `[${clue.category} $${clue.value}${isDD ? ` DD wager $${clue.ddWager}` : ''}]`;
         if (correct) {
             lastCorrectAnswerer = guess.username;
+            lastCorrectTileId   = clue.tileId;
             adjustScore(guess.username, scoreAmt);
             clueScorers.push({ username: guess.username, delta: scoreAmt, wager: isDD });
             db.ref('boardState/hostSettings/lastCorrectAnswerer').set(guess.username);
+            db.ref('boardState/hostSettings/lastCorrectTileId').set(clue.tileId);
             syncLCAInput();
             log(`✓ ${guess.username} correct on ${clueContext}! +$${scoreAmt}`);
             dismissClue('correct', guess.username);
@@ -2337,6 +2347,13 @@ function renderBoard() {
                 badge.textContent = 'DD';
                 d.appendChild(badge);
             }
+            if (tile.id === lastCorrectTileId) {
+                const star = document.createElement('span');
+                star.style.cssText = 'position:absolute;bottom:2px;left:4px;font-size:0.65rem;line-height:1;';
+                star.textContent = '⭐';
+                star.title = 'Last correct answer';
+                d.appendChild(star);
+            }
             if (tile.played) {
                 const reviewBtn = document.createElement('button');
                 reviewBtn.className = 'bt-review';
@@ -2469,11 +2486,14 @@ function initListeners() {
             nameSpan.appendChild(sc);
 
             const adjDiv = document.createElement('div'); adjDiv.className = 'p-adj';
-            const plus   = document.createElement('button'); plus.className  = 'btn-ok btn-sm';  plus.textContent  = '+200';
-            const minus  = document.createElement('button'); minus.className = 'btn-red btn-sm'; minus.textContent = '−200';
-            plus.onclick  = () => adjustScore(name,  200);
-            minus.onclick = () => adjustScore(name, -200);
-            adjDiv.appendChild(plus); adjDiv.appendChild(minus);
+            const amtIn  = document.createElement('input');
+            amtIn.type = 'number'; amtIn.min = '1'; amtIn.value = '200';
+            amtIn.style.cssText = 'width:58px;background:#0d0d1a;border:1px solid var(--border);color:#fff;padding:2px 5px;border-radius:4px;font-size:0.8rem;font-family:inherit;text-align:center;';
+            const plus   = document.createElement('button'); plus.className  = 'btn-ok btn-sm';  plus.textContent  = '+';
+            const minus  = document.createElement('button'); minus.className = 'btn-red btn-sm'; minus.textContent = '−';
+            plus.onclick  = () => { const v = Math.abs(parseInt(amtIn.value, 10) || 0); if (v) adjustScore(name,  v); };
+            minus.onclick = () => { const v = Math.abs(parseInt(amtIn.value, 10) || 0); if (v) adjustScore(name, -v); };
+            adjDiv.appendChild(amtIn); adjDiv.appendChild(plus); adjDiv.appendChild(minus);
 
             d.appendChild(nameSpan); d.appendChild(adjDiv);
             roster.appendChild(d);
@@ -2561,8 +2581,10 @@ function commitUpload(resetScores) {
     if (!pendingUploadTiles) return;
     // Always clear lastCorrectAnswerer — First Question will set it at the start of every round
     lastCorrectAnswerer = null;
+    lastCorrectTileId   = null;
     syncLCAInput();
     db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
+    db.ref('boardState/hostSettings/lastCorrectTileId').set(null);
     // Write tiles to Firebase without DD flags — DDs are assigned in applySettings
     const tiles = pendingUploadTiles.map(t => { const c = { ...t }; delete c.dd; return c; });
     db.ref('boardState/categories').set(pendingUploadCategories);
@@ -2645,8 +2667,10 @@ function importFile(files) {
 function resetGameState() {
     // Always clear lastCorrectAnswerer — First Question will set it at the start of every round
     lastCorrectAnswerer = null;
+    lastCorrectTileId   = null;
     syncLCAInput();
     db.ref('boardState/hostSettings/lastCorrectAnswerer').set(null);
+    db.ref('boardState/hostSettings/lastCorrectTileId').set(null);
     // Reset tiles, scores, log, and active clue; unlock DD settings; keep modal open
     gameStarted   = false;
     pendingGuess  = null;
@@ -2745,20 +2769,25 @@ function applySettings() {
 
 
 function reviewClue(tile) {
-    db.ref('activeClue').set({
-        status: 'answer-reveal',
-        answer: tile.answer || '—',
-        category: tile.category || '',
-        value: tile.value || 0,
-        question: tile.question || ''
-    });
     log(`Reviewing: [${tile.category} $${tile.value}] ${tile.question}`);
     reviewTile = tile;
     pendingCorrectionApply = null;
     document.getElementById('rv-username-in').value = '';
     document.getElementById('rv-preview-panel').style.display = 'none';
     db.ref(`boardState/tileResults/${tile.id}`).once('value').then(snap => {
-        populateReviewModal(tile, snap.val() || {});
+        const results = snap.val() || {};
+        const correctAnswerer = (results.scorers || []).find(s => s.delta > 0)?.username || '';
+        db.ref('activeClue').set({
+            status: 'answer-reveal',
+            answer: tile.answer || '—',
+            category: tile.category || '',
+            value: tile.value || 0,
+            question: tile.question || '',
+            src: tile.src || '',
+            url: cleanUrl(tile.url || ''),
+            correctAnswerer
+        });
+        populateReviewModal(tile, results);
     });
     openModal('review-modal');
 }
