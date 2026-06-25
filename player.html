@@ -97,12 +97,12 @@
         .tile-scorer.wrong   { color: #ffaa44; }
 
         /* ─── Clue Overlay ─── */
-        #clue-overlay { position: absolute; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--blue); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 10; }
-        #clue-overlay.active { opacity: 1; }
+        #clue-overlay { position: fixed; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--blue); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: clamp(20px, 6vw, 60px); text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 51; }
+        #clue-overlay.active { opacity: 1; pointer-events: auto; }
 
         /* ─── Daily Double Overlay ─── */
-        #dd-overlay { position: absolute; inset: 0; background: rgba(10,6,0,0.98); border: 4px solid var(--yellow); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 12; }
-        #dd-overlay.active { opacity: 1; }
+        #dd-overlay { position: fixed; inset: 0; background: rgba(10,6,0,0.98); border: 4px solid var(--yellow); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: clamp(20px, 6vw, 60px); text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 52; }
+        #dd-overlay.active { opacity: 1; pointer-events: auto; }
         .ov-dd-flash  { color: var(--yellow); font-size: 5rem; font-weight: 900; letter-spacing: 0.08em; line-height: 1.1; text-shadow: 0 0 40px rgba(255,255,90,0.5); }
         .ov-dd-cat    { color: rgba(255,255,255,0.6); font-size: 1.6rem; font-weight: 700; text-transform: uppercase; margin-top: 18px; }
         .ov-dd-player { color: #fff; font-size: 2.2rem; font-weight: 900; margin-top: 10px; }
@@ -115,19 +115,19 @@
         .ov-dd-timer-num.urgent { color: #ff4444; }
 
         /* ─── Answer Reveal Overlay ─── */
-        #answer-overlay { position: absolute; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--green); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 11; }
-        #answer-overlay.active { opacity: 1; }
+        #answer-overlay { position: fixed; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--green); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: clamp(20px, 6vw, 60px); text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 52; }
+        #answer-overlay.active { opacity: 1; pointer-events: auto; }
         .ov-ar-label    { color: rgba(255,255,255,0.45); font-size: 1.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 24px; }
         .ov-ar-question { color: rgba(255,255,255,0.8); font-size: 2.4rem; font-weight: 700; line-height: 1.35; max-width: 88%; text-align: center; margin-bottom: 32px; }
         .ov-ar-answer   { color: var(--green); font-size: 4.5rem; font-weight: 900; line-height: 1.3; max-width: 88%; }
         .ov-ar-source   { font-size: 1.2rem; color: rgba(255,255,255,0.35); margin-top: 20px; word-break: break-all; }
         .ov-ar-guesser  { color: var(--green); font-size: 1.5rem; font-weight: 700; margin-top: 22px; letter-spacing: 0.04em; opacity: 0.9; }
-        .ov-cat { color: var(--blue); font-size: 1.6rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
-        .ov-val { color: var(--green); font-size: 3rem; font-weight: 900; margin-bottom: 36px; }
-        .ov-txt { color: var(--yellow); font-size: 3.4rem; font-weight: 700; line-height: 1.4; max-width: 88%; }
+        .ov-cat { color: var(--blue); font-size: clamp(1rem, 3.5vw, 1.6rem); font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+        .ov-val { color: var(--green); font-size: clamp(1.6rem, 5vw, 3rem); font-weight: 900; margin-bottom: 24px; }
+        .ov-txt { color: var(--yellow); font-size: clamp(1.4rem, 5.5vw, 3.4rem); font-weight: 700; line-height: 1.4; max-width: 92%; }
 
         /* ─── Overlay Timer ─── */
-        #ov-timer { position: absolute; bottom: 36px; left: 80px; right: 80px; display: none; }
+        #ov-timer { position: absolute; bottom: calc(var(--ctrl-h) + 20px); left: clamp(20px, 5vw, 80px); right: clamp(20px, 5vw, 80px); display: none; }
         .ov-timer-bar-wrap { height: 10px; background: rgba(255,255,255,0.12); border-radius: 5px; overflow: hidden; margin-bottom: 14px; }
         .ov-timer-bar { height: 100%; border-radius: 5px; background: var(--green); transition: width 0.9s linear, background 0.3s; }
         .ov-timer-num { text-align: center; font-size: 3rem; font-weight: 900; color: var(--green); line-height: 1; opacity: 0.88; }
@@ -135,7 +135,7 @@
         .ov-timer-num.urgent { color: #ff4444; }
 
         /* ─── Leaderboard ─── */
-        #leaderboard { display: grid; gap: 10px; height: 118px; padding: 0 8% 10px; }
+        #leaderboard { flex-shrink: 0; display: grid; gap: 10px; min-height: 80px; max-height: 130px; padding: 6px 4% 8px; background: #05060f; border-top: 1px solid rgba(255,255,255,0.07); }
         .player-card { background: linear-gradient(135deg, #07091a 0%, #0e1130 100%); border: 1px solid rgba(74,111,255,0.18); border-left: 3px solid var(--gold); border-radius: 8px; display: flex; align-items: center; padding: 0 28px; gap: 18px; }
         .player-card.rank-2 { border-left-color: #b8b8c8; }
         .player-card.rank-3 { border-left-color: #a06030; }
@@ -154,20 +154,20 @@
         #ticker-text.visible { opacity: 1; }
 
         /* ─── Splash Screens ─── */
-        #splash-overlay { position: absolute; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 32px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
-        #splash-overlay.active { opacity: 1; }
+        #splash-overlay { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 32px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        #splash-overlay.active { opacity: 1; pointer-events: auto; }
         .splash-title    { font-size: 8rem; font-weight: 900; letter-spacing: 0.12em; color: var(--yellow); text-shadow: 0 0 60px rgba(255,255,90,0.45); text-transform: uppercase; }
         .splash-subtitle { font-size: 2rem; font-weight: 700; color: rgba(255,255,255,0.45); letter-spacing: 0.18em; text-transform: uppercase; }
         .splash-bar      { width: 320px; height: 4px; background: var(--blue); border-radius: 2px; opacity: 0.6; }
 
-        #firstq-overlay { position: absolute; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 28px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
-        #firstq-overlay.active { opacity: 1; }
+        #firstq-overlay { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 28px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        #firstq-overlay.active { opacity: 1; pointer-events: auto; }
         .firstq-category { font-size: 2.2rem; font-weight: 800; letter-spacing: 0.14em; color: rgba(255,255,255,0.5); text-transform: uppercase; }
         .firstq-question { font-size: 3.8rem; font-weight: 900; color: #fff; text-align: center; max-width: 1400px; line-height: 1.2; text-transform: uppercase; text-shadow: 0 2px 24px rgba(0,0,0,0.6); }
         .firstq-bar      { width: 320px; height: 4px; background: var(--blue); border-radius: 2px; opacity: 0.6; }
 
-        #podium-overlay { position: absolute; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 24px; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
-        #podium-overlay.active { opacity: 1; }
+        #podium-overlay { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 24px; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+        #podium-overlay.active { opacity: 1; pointer-events: auto; }
         .podium-header { font-size: 4.5rem; font-weight: 900; letter-spacing: 0.16em; color: var(--yellow); text-shadow: 0 0 60px rgba(255,220,50,0.5); text-transform: uppercase; }
         .podium-stage  { display: flex; align-items: flex-end; gap: 20px; }
         .podium-col    { display: flex; flex-direction: column; align-items: center; width: 280px; }
@@ -257,70 +257,76 @@
     </div>
 </div>
 
-<!-- Board (hidden until logged in) -->
+<!-- Full-screen overlays (position:fixed, sit above board, below ctrl-bar z-100) -->
+<div id="splash-overlay">
+    <div id="splash-default" style="display:flex;flex-direction:column;align-items:center;gap:32px;">
+        <div class="splash-title">Quiz Show!</div>
+        <div class="splash-subtitle" style="font-size:1rem;opacity:0.4;">(for legal reasons)</div>
+        <div class="splash-bar"></div>
+        <div class="splash-subtitle">Get ready to play</div>
+    </div>
+    <img id="splash-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:contain;">
+</div>
+<div id="firstq-overlay">
+    <div class="firstq-category" id="firstq-category"></div>
+    <div class="firstq-bar"></div>
+    <div class="firstq-question" id="firstq-question"></div>
+    <div class="ov-ar-source" id="firstq-source" style="display:none;"></div>
+    <div class="ov-ar-question" id="firstq-reveal-q"       style="display:none;"></div>
+    <div class="ov-ar-label"    id="firstq-reveal-label"   style="display:none;">The answer was</div>
+    <div class="ov-ar-answer"   id="firstq-reveal-a"       style="display:none;"></div>
+    <div class="ov-ar-guesser"  id="firstq-reveal-guesser" style="display:none;"></div>
+</div>
+<div id="podium-overlay">
+    <div class="podium-header">Final Results</div>
+    <div class="podium-stage">
+        <div class="podium-col" id="pod-col-2"><div class="podium-name" id="pod-name-2">—</div><div class="podium-score" id="pod-score-2"></div><div class="podium-block p2">2</div></div>
+        <div class="podium-col" id="pod-col-1"><div class="podium-name" id="pod-name-1">—</div><div class="podium-score" id="pod-score-1"></div><div class="podium-block p1">1</div></div>
+        <div class="podium-col" id="pod-col-3"><div class="podium-name" id="pod-name-3">—</div><div class="podium-score" id="pod-score-3"></div><div class="podium-block p3">3</div></div>
+    </div>
+</div>
+<div id="dd-overlay">
+    <div class="ov-dd-flash">⭐ POWER PLAY ⭐</div>
+    <div class="ov-dd-cat"    id="ov-dd-cat"></div>
+    <div class="ov-dd-player" id="ov-dd-player"></div>
+    <div class="ov-dd-prompt" id="ov-dd-prompt">Waiting for wager...</div>
+    <div class="ov-dd-timer"  id="ov-dd-timer" style="display:none">
+        <div class="ov-dd-timer-bar-wrap"><div class="ov-dd-timer-bar" id="ov-dd-timer-bar"></div></div>
+        <div class="ov-dd-timer-num" id="ov-dd-timer-num">60</div>
+    </div>
+</div>
+<div id="clue-overlay">
+    <div class="ov-cat" id="ov-cat"></div>
+    <div class="ov-val" id="ov-val"></div>
+    <div class="ov-txt" id="ov-txt"></div>
+    <div id="ov-timer">
+        <div class="ov-timer-bar-wrap"><div class="ov-timer-bar" id="ov-timer-bar"></div></div>
+        <div class="ov-timer-num" id="ov-timer-num">20</div>
+    </div>
+</div>
+<div id="answer-overlay">
+    <div class="ov-ar-question" id="ov-ar-question"></div>
+    <div class="ov-ar-label">The answer was</div>
+    <div class="ov-ar-answer"   id="ov-ar-answer"></div>
+    <div class="ov-ar-guesser"  id="ov-ar-guesser"  style="display:none;"></div>
+    <div class="ov-ar-source"   id="ov-ar-source"   style="display:none;"></div>
+</div>
+
+<!-- Ticker bar -->
+<div id="ticker-bar"><div id="ticker-text"></div></div>
+
+<!-- Board grid (scaled canvas — portrait-safe because overlays are now fixed) -->
 <div id="board-wrap">
     <div id="canvas">
-        <div id="ticker-bar"><div id="ticker-text"></div></div>
-        <div id="splash-overlay">
-            <div id="splash-default" style="display:flex;flex-direction:column;align-items:center;gap:32px;">
-                <div class="splash-title">Quiz Show!</div>
-                <div class="splash-subtitle" style="font-size:1rem;opacity:0.4;">(for legal reasons)</div>
-                <div class="splash-bar"></div>
-                <div class="splash-subtitle">Get ready to play</div>
-            </div>
-            <img id="splash-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:contain;">
-        </div>
-        <div id="firstq-overlay">
-            <div class="firstq-category" id="firstq-category"></div>
-            <div class="firstq-bar"></div>
-            <div class="firstq-question" id="firstq-question"></div>
-            <div class="ov-ar-source" id="firstq-source" style="display:none;"></div>
-            <div class="ov-ar-question" id="firstq-reveal-q"       style="display:none;"></div>
-            <div class="ov-ar-label"    id="firstq-reveal-label"   style="display:none;">The answer was</div>
-            <div class="ov-ar-answer"   id="firstq-reveal-a"       style="display:none;"></div>
-            <div class="ov-ar-guesser"  id="firstq-reveal-guesser" style="display:none;"></div>
-        </div>
-        <div id="podium-overlay">
-            <div class="podium-header">Final Results</div>
-            <div class="podium-stage">
-                <div class="podium-col" id="pod-col-2"><div class="podium-name" id="pod-name-2">—</div><div class="podium-score" id="pod-score-2"></div><div class="podium-block p2">2</div></div>
-                <div class="podium-col" id="pod-col-1"><div class="podium-name" id="pod-name-1">—</div><div class="podium-score" id="pod-score-1"></div><div class="podium-block p1">1</div></div>
-                <div class="podium-col" id="pod-col-3"><div class="podium-name" id="pod-name-3">—</div><div class="podium-score" id="pod-score-3"></div><div class="podium-block p3">3</div></div>
-            </div>
-        </div>
         <div class="game-area">
             <div class="cat-row"  id="cats"></div>
             <div class="clue-grid" id="grid"></div>
-            <div id="dd-overlay">
-                <div class="ov-dd-flash">⭐ POWER PLAY ⭐</div>
-                <div class="ov-dd-cat"    id="ov-dd-cat"></div>
-                <div class="ov-dd-player" id="ov-dd-player"></div>
-                <div class="ov-dd-prompt" id="ov-dd-prompt">Waiting for wager...</div>
-                <div class="ov-dd-timer"  id="ov-dd-timer" style="display:none">
-                    <div class="ov-dd-timer-bar-wrap"><div class="ov-dd-timer-bar" id="ov-dd-timer-bar"></div></div>
-                    <div class="ov-dd-timer-num" id="ov-dd-timer-num">60</div>
-                </div>
-            </div>
-            <div id="clue-overlay">
-                <div class="ov-cat" id="ov-cat"></div>
-                <div class="ov-val" id="ov-val"></div>
-                <div class="ov-txt" id="ov-txt"></div>
-                <div id="ov-timer">
-                    <div class="ov-timer-bar-wrap"><div class="ov-timer-bar" id="ov-timer-bar"></div></div>
-                    <div class="ov-timer-num" id="ov-timer-num">20</div>
-                </div>
-            </div>
-            <div id="answer-overlay">
-                <div class="ov-ar-question" id="ov-ar-question"></div>
-                <div class="ov-ar-label">The answer was</div>
-                <div class="ov-ar-answer"   id="ov-ar-answer"></div>
-                <div class="ov-ar-guesser"  id="ov-ar-guesser"  style="display:none;"></div>
-                <div class="ov-ar-source"   id="ov-ar-source"   style="display:none;"></div>
-            </div>
         </div>
-        <div id="leaderboard"></div>
     </div>
 </div>
+
+<!-- Leaderboard (native element, outside scaled canvas) -->
+<div id="leaderboard"></div>
 
 <!-- Player controls bar -->
 <div id="ctrl-bar" class="hidden">
@@ -668,14 +674,10 @@ function showCtrl(mode) {
         document.getElementById('ctrl-' + id).classList.toggle('active', id === mode);
     });
     if (mode === 'guess') {
-        const inp = document.getElementById('guess-input');
-        inp.value = '';
-        inp.focus();
+        document.getElementById('guess-input').value = '';
     }
     if (mode === 'wager') {
-        const inp = document.getElementById('wager-input');
-        inp.value = '';
-        inp.focus();
+        document.getElementById('wager-input').value = '';
     }
 }
 
