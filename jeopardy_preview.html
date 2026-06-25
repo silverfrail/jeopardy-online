@@ -200,9 +200,19 @@
 
 <script>
 // ── FIREBASE ──────────────────────────────────────────────────────────────────
-const db = firebase.initializeApp({
+const urlParams  = new URLSearchParams(window.location.search);
+const _roomCode  = urlParams.get('room') || localStorage.getItem('jeo_preview_room') || '';
+if (_roomCode) localStorage.setItem('jeo_preview_room', _roomCode);
+const _baseDb = firebase.initializeApp({
     databaseURL: 'https://jeopardy-stream-default-rtdb.firebaseio.com'
 }).database();
+const db = new Proxy(_baseDb, {
+    get(target, prop) {
+        if (prop === 'ref') return (path) => target.ref(_roomCode ? 'rooms/' + _roomCode + '/' + path : path);
+        const v = target[prop];
+        return typeof v === 'function' ? v.bind(target) : v;
+    }
+});
 
 let lastScores       = {};
 let initialRefresh   = true;

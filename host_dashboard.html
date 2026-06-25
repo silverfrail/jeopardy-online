@@ -25,9 +25,12 @@
 
         /* ── Auth Overlay ── */
         #auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-        .auth-box { background: var(--panel); border: 2px solid var(--blue); border-radius: 12px; padding: 40px; width: 320px; text-align: center; }
-        .auth-box h2 { color: var(--green); margin-bottom: 20px; }
+        .auth-box { background: var(--panel); border: 2px solid var(--blue); border-radius: 12px; padding: 36px 40px; width: 360px; text-align: center; }
+        .auth-box h2 { color: var(--green); margin-bottom: 6px; }
+        .auth-box .auth-sub { color: var(--dim); font-size: 0.8rem; margin-bottom: 22px; }
         .auth-box input { width: 100%; padding: 10px; background: #000; border: 1px solid var(--border); color: var(--text); border-radius: 4px; margin-bottom: 10px; font-family: inherit; font-size: 0.9rem; }
+        .auth-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--dim); font-size: 0.78rem; }
+        .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
         .auth-err { color: var(--red); font-size: 0.8rem; min-height: 1.2em; margin-top: 6px; }
 
         /* ── Layout ── */
@@ -210,11 +213,28 @@
 <!-- ── Auth Overlay ── -->
 <div id="auth-overlay">
     <div class="auth-box">
-        <h2>Host Dashboard</h2>
-        <input type="text"     id="host-name-in" placeholder="Your name (e.g. Joshua)..." style="margin-bottom:8px;" onkeydown="if(event.key==='Enter')document.getElementById('pass-in').focus()">
-        <input type="password" id="pass-in" placeholder="Password..." onkeydown="if(event.key==='Enter')unlock()">
-        <button onclick="unlock()" style="width:100%;padding:10px;">Unlock</button>
-        <div class="auth-err" id="auth-err"></div>
+        <h2>Jeopardy! Host</h2>
+
+        <!-- Continue existing game -->
+        <div id="auth-continue">
+            <div class="auth-sub">Continue an existing game</div>
+            <input type="text"     id="host-name-in"  placeholder="Your name..." onkeydown="if(event.key==='Enter')document.getElementById('pass-in').focus()">
+            <input type="text"     id="room-code-in"  placeholder="Room code" style="text-transform:uppercase;letter-spacing:0.12em;" onkeydown="if(event.key==='Enter')document.getElementById('pass-in').focus()">
+            <input type="password" id="pass-in"        placeholder="Password..." onkeydown="if(event.key==='Enter')unlock()">
+            <button onclick="unlock()" style="width:100%;padding:10px;">Unlock</button>
+            <div class="auth-err" id="auth-err"></div>
+        </div>
+
+        <div class="auth-divider">or</div>
+
+        <!-- Create new game -->
+        <div id="auth-new">
+            <div class="auth-sub">Start a new game</div>
+            <input type="text"     id="new-host-name" placeholder="Your name..." onkeydown="if(event.key==='Enter')document.getElementById('new-pass-in').focus()">
+            <input type="password" id="new-pass-in"   placeholder="Set a password for this room..." onkeydown="if(event.key==='Enter')createRoom()">
+            <button onclick="createRoom()" style="width:100%;padding:10px;background:var(--blue);">New Game</button>
+            <div class="auth-err" id="auth-err-new"></div>
+        </div>
     </div>
 </div>
 
@@ -331,17 +351,6 @@
         </div>
 
         <div class="cfg-section">
-            <div class="cfg-section-title">Commands</div>
-            <div class="cfg-row">
-                <div class="cfg-row-main">
-                    <label for="stg-guess-cmd" style="font-size:0.88rem;">Guess command</label>
-                    <span class="tip" data-tip="The chat command viewers use to submit answers. Default is !guess. Changes take effect when you click Apply.">?</span>
-                </div>
-                <input type="text" id="stg-guess-cmd" style="width:90px;margin-bottom:0!important;font-size:0.82rem;text-align:center;" placeholder="!guess">
-            </div>
-        </div>
-
-        <div class="cfg-section">
             <div class="cfg-section-title">Ticker Messages</div>
             <div style="font-size:0.8rem;color:var(--dim);margin-bottom:10px;">Messages cycle above the board on the preview page. Appears in order. Leave empty to hide ticker.</div>
             <div id="stg-ticker-msgs"></div>
@@ -404,10 +413,14 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <span style="font-size:0.72rem;color:var(--dim);opacity:0.7;">v61</span>
-        <span><span class="dot" id="tw-dot"></span><span class="stat-label">Twitch</span></span>
         <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
+        <span style="display:flex;align-items:center;gap:5px;">
+            <span style="font-size:0.75rem;color:var(--dim);">Room:</span>
+            <strong id="hdr-room-code" style="color:var(--green);font-size:0.9rem;letter-spacing:0.12em;">—</strong>
+            <button class="btn-sec btn-sm" id="hdr-room-copy" onclick="copyRoomCode()" title="Copy room code">⎘ Copy</button>
+            <button class="btn-red btn-sm" onclick="newRoom()" title="Generate a new room code — disconnects current players">New Room</button>
+        </span>
         <span style="display:flex;align-items:center;gap:5px;">
             <span style="font-size:0.75rem;color:var(--dim);">DD Player:</span>
             <input type="text" id="hdr-lca-in" placeholder="—" autocomplete="off" style="width:110px;background:#0d0d1a;border:1px solid var(--border);color:#fff;padding:2px 7px;border-radius:4px;font-size:0.78rem;font-family:inherit;">
@@ -463,7 +476,7 @@
                     <button class="btn-ok" style="flex:1" onclick="pushCustomFirstQuestion()">&#8593; Push to Preview</button>
                     <button id="fq-restore-btn" class="btn-sec btn-sm" onclick="restoreBoardFirstQuestion()" style="display:none;" title="Restore original board question">&#8635; Board Q</button>
                 </div>
-                <div id="fq-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-bottom:10px;">Source: <a id="fq-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a> <button id="fq-src-share" onclick="shareSourceToChat('fq-src-link')" title="Share URL to Twitch chat" style="background:none;border:none;cursor:pointer;color:var(--dim);font-size:0.75rem;padding:0 2px;vertical-align:middle;">&#8599;</button></div>
+                <div id="fq-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-bottom:10px;">Source: <a id="fq-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a></div>
                 <div id="fq-pg-panel" style="display:none;background:#1a1500;border:2px solid var(--yellow);border-radius:6px;padding:12px;margin-top:4px;">
                     <div class="pg-who" id="fq-pg-who"></div>
                     <div class="pg-txt" id="fq-pg-txt"></div>
@@ -503,7 +516,7 @@
                     <div class="ac-albl" id="ac-albl">Correct Answer</div>
                     <div class="ac-ans" id="ac-ans"></div>
                     <div id="ac-alt" style="display:none;font-size:0.78rem;color:var(--dim);margin-top:4px;"></div>
-                    <div id="ac-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-top:4px;">Source: <a id="ac-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a> <button id="ac-src-share" onclick="shareSourceToChat('ac-src-link')" title="Share URL to Twitch chat" style="background:none;border:none;cursor:pointer;color:var(--dim);font-size:0.75rem;padding:0 2px;vertical-align:middle;">↗</button></div>
+                    <div id="ac-src" style="display:none;font-size:0.72rem;color:var(--dim);margin-top:4px;">Source: <a id="ac-src-link" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--blue);word-break:break-all;"></a></div>
 
                     <!-- Countdown Timer -->
                     <div id="ac-timer" style="display:none;">
@@ -569,53 +582,10 @@
         </div>
         <div class="sidebar">
 
-            <!-- Twitch -->
-            <div class="panel" data-panel-id="twitch">
-                <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Twitch <button class="panel-toggle" onclick="togglePanel(this)" title="Collapse">▾</button></div>
-
-                <!-- Chat active indicator -->
-                <div class="chat-role-row">
-                    <span class="chat-active-label">Chat: <span id="chat-active-name" class="chat-user is-none">&mdash;</span></span>
-                    <button id="claim-btn" class="claim-btn" onclick="claimChatPrimary()" style="display:none">Claim Chat</button>
-                </div>
-                <div id="tw-warn-banner" class="tw-warn-banner"></div>
-
-                <!-- Followers only toggle — always visible -->
-                <!-- Auth section — always visible -->
-                <div id="tw-connect">
-                    <button onclick="startTwitchAuth()" style="width:100%">Connect Twitch Account</button>
-                    <div style="font-size:0.75rem;color:var(--dim);margin-top:8px;">Required for follower verification and chat messages.</div>
-                </div>
-                <div id="tw-connected" style="display:none">
-                    <div style="font-size:0.82rem;color:var(--green);margin-bottom:6px;">&#9679; Connected as <strong id="tw-user"></strong></div>
-                    <div style="font-size:0.78rem;color:var(--dim);">Channel: <strong id="tw-chan"></strong></div>
-                    <div style="font-size:0.78rem;color:var(--dim);margin-top:3px;">Approved this session: <strong id="appr-count">0</strong></div>
-                    <button class="btn-sec btn-sm" style="margin-top:8px" onclick="disconnectTwitch()">Disconnect</button>
-                </div>
-
-                <!-- Followers only — always visible, disabled until Twitch connected -->
-                <div class="toggle-row" style="margin-top:10px;margin-bottom:10px;">
-                    <input type="checkbox" id="followers-only" checked onchange="updateFollowersOnly()" disabled>
-                    <label for="followers-only" id="followers-only-label" style="color:var(--dim);opacity:0.45;">Followers only</label>
-                    <span class="tip" data-tip="When checked, only viewers who follow your Twitch channel can submit guesses. Connect your Twitch account above to enable this toggle.">?</span>
-                </div>
-            </div>
-
             <!-- Scoreboard -->
             <div class="panel collapsed" data-panel-id="scoreboard">
                 <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Scoreboard <button class="panel-toggle" onclick="togglePanel(this)" title="Expand">▸</button></div>
                 <div id="roster"><div style="color:var(--dim);font-size:0.82rem;">No players yet.</div></div>
-            </div>
-
-            <!-- Category Suggestions -->
-            <div class="panel collapsed" data-panel-id="categories">
-                <div class="ptitle"><span class="panel-grip" title="Drag to reorder">☰</span>Category Suggestions
-                    <div style="display:flex;gap:5px;align-items:center;">
-                        <button class="btn-red btn-sm" onclick="clearAllCategories()">Clear All</button>
-                        <button class="panel-toggle" onclick="togglePanel(this)" title="Expand">▸</button>
-                    </div>
-                </div>
-                <div id="cat-suggestions"><div style="color:var(--dim);font-size:0.82rem;">No suggestions yet. Viewers type !cat [name] in chat.</div></div>
             </div>
 
             <!-- Game Management -->
@@ -667,40 +637,43 @@
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const CLIENT_ID    = 'oetfyj917dbuh00b4ohrfimxv5ok6s';
-const REDIRECT_URI = 'https://silverfrail.github.io/jeopardy/host_dashboard.html';
-const BROADCASTER  = 'silverfrailttv';
-const SCOPES       = 'moderator:read:followers chat:read chat:edit';
+// (Twitch OAuth removed — web player version)
 
 // ── FIREBASE ──────────────────────────────────────────────────────────────────
-const db = firebase.initializeApp({
+function _genRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+}
+let _roomCode = localStorage.getItem('jeo_room_code') || _genRoomCode();
+localStorage.setItem('jeo_room_code', _roomCode);
+
+const _baseDb = firebase.initializeApp({
     databaseURL: 'https://jeopardy-stream-default-rtdb.firebaseio.com'
 }).database();
+const _authDb = _baseDb;  // root-scoped — for password check only
+const db = new Proxy(_baseDb, {
+    get(target, prop) {
+        if (prop === 'ref') return (path) => target.ref('rooms/' + _roomCode + '/' + path);
+        const v = target[prop];
+        return typeof v === 'function' ? v.bind(target) : v;
+    }
+});
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-let twitchToken   = localStorage.getItem('twitch_token');
-let broadcasterId = localStorage.getItem('broadcaster_id');
-let tmiClient     = null;
-let twitchLogin   = localStorage.getItem('twitch_login') || null;
 let boardData     = null;
 let activeClue    = null;
 let pendingGuess  = null;       // { username, text }
 let guessQueue    = [];         // guesses waiting while pendingGuess is active
 let wrongGuessers = new Set();  // usernames who guessed wrong on current clue
-let followerCache = new Map();  // username.toLowerCase() → boolean
-let userIdCache   = new Map();  // login → userId
-let lastBotReplyAt = new Map(); // username.toLowerCase() → timestamp
-let pendingChatMessages = [];   // messages queued while IRC socket is connecting
-let approvedCnt   = 0;
-let tmiRetryDelay = 2000;       // exponential backoff delay for IRC reconnects (ms)
 
 // ── SETTINGS (persisted across sessions) ─────────────────────────────────────
-let timerEnabled    = localStorage.getItem('cfg_timer_on')   === '1';
-        let timerSeconds    = Math.min(30, Math.max(5, parseInt(localStorage.getItem('cfg_timer_secs') || '20', 10)));
-        let guessCommand    = localStorage.getItem('cfg_guess_cmd') || '!guess';
-        let tickerMessages  = JSON.parse(localStorage.getItem('cfg_ticker_msgs') || '[]');
-        let tickerInterval  = Math.max(2, parseInt(localStorage.getItem('cfg_ticker_secs') || '5', 10));
-        let timerHandle     = null;
+let timerEnabled    = localStorage.getItem('cfg_timer_on') === '1';
+let timerSeconds    = Math.min(30, Math.max(5, parseInt(localStorage.getItem('cfg_timer_secs') || '20', 10)));
+let tickerMessages  = JSON.parse(localStorage.getItem('cfg_ticker_msgs') || '[]');
+let tickerInterval  = Math.max(2, parseInt(localStorage.getItem('cfg_ticker_secs') || '5', 10));
+let timerHandle     = null;
 let timerRemaining  = 0;
 let timerExpired    = false;   // true after timer hits zero — blocks new guesses
 let lastActiveTileId = null;
@@ -714,11 +687,10 @@ const SESSION_ID = (() => {
     if (!id) { id = Math.random().toString(36).slice(2); sessionStorage.setItem(key, id); }
     return id;
 })();
-let isChatPrimary   = false;  // true only for the dashboard that owns chat processing
-const chatPrimaryRef = db.ref('boardState/hostSettings/chatPrimary'); // Firebase node for chat primary election
+let isChatPrimary   = false; // kept for compatibility — no longer used for Twitch
 
 // ── DAILY DOUBLE STATE ────────────────────────────────────────────────────────
-let categorySubmissions = {};    // pushKey → { category, username }
+let categorySubmissions = {}; // unused — suggestions panel removed
 let hostName            = sessionStorage.getItem('dashboard_host_name') || 'Host';
 let ddEnabled           = false;
 let ddCount             = 1;
@@ -740,9 +712,6 @@ let penaltyRegular      = true;  // deduct points for wrong regular clue answers
 let penaltyDD           = true;  // deduct points for wrong DD answers
 let reviewTile             = null;  // tile currently open in review modal
 let pendingCorrectionApply = null;  // closure to call on correction confirm
-
-// Handle implicit grant callback (token in URL hash) before anything else
-const oauthReady = handleOAuthCallback();
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 function log(msg) {
@@ -1053,159 +1022,70 @@ function initDashboard() {
     document.getElementById('auth-overlay').style.display = 'none';
     document.getElementById('ui').style.display = 'flex';
     document.getElementById('fb-dot').classList.add('on');
-    log('Dashboard initialized.');
+    const rcEl = document.getElementById('hdr-room-code');
+    if (rcEl) rcEl.textContent = _roomCode;
+    log('Dashboard initialized. Room: ' + _roomCode);
     initListeners();
-    listenChatPrimary();           // claim or observe chat-primary role
-    listenFollowersOnly();         // sync followers-only setting across dashboards
-    listenTimerSettings();         // sync timer settings across dashboards
-    listenPendingGuess();          // sync pending guess panel across dashboards
-    listenCategorySubmissions();   // sync viewer category suggestions
-    listenHostChat();               // sync host-to-host chat
-    initPanelDrag();                // sidebar drag-and-drop reordering
-    restorePanelStates();           // restore collapsed/expanded state per user
-    listenActiveScreen();           // sync preview screen selection
-    listenFirstQuestion();          // restore first question from Firebase on load
-    listenSplashImage();            // sync custom splash image
-    initTMI();  // always listen to chat, regardless of OAuth state
-    // Optimistically restore Twitch UI if cached credentials exist
-    // (checkTwitchSession will validate async and revert if expired)
-    if (twitchToken && twitchLogin) {
-        document.getElementById('tw-connect').style.display   = 'none';
-        document.getElementById('tw-connected').style.display = '';
-        document.getElementById('tw-dot').classList.add('on');
-        document.getElementById('tw-user').innerText = twitchLogin;
-        document.getElementById('tw-chan').innerText = BROADCASTER;
-    }
-    oauthReady.then(() => checkTwitchSession());
-    // Release chat-primary lock when this tab closes
-    window.addEventListener('beforeunload', releaseChatPrimary);
+    listenTimerSettings();
+    listenPendingGuess();
+    listenHostChat();
+    initPanelDrag();
+    restorePanelStates();
+    listenActiveScreen();
+    listenFirstQuestion();
+    listenSplashImage();
+    listenGuessInbox();
 }
 
 function unlock() {
     const nameVal = document.getElementById('host-name-in').value.trim();
+    const codeVal = document.getElementById('room-code-in').value.trim().toUpperCase();
     const key     = document.getElementById('pass-in').value;
-    db.ref('authValidation/secretKey').once('value').then(snap => {
-        if (snap.val() === key) {
-            if (nameVal) { hostName = nameVal; sessionStorage.setItem('dashboard_host_name', nameVal); }
-            sessionStorage.setItem('dashboard_unlocked', '1');
-            initDashboard();
-        } else {
-            document.getElementById('auth-err').innerText = 'Incorrect password.';
-        }
-    });
+    const errEl   = document.getElementById('auth-err');
+    errEl.textContent = '';
+    if (!nameVal) { errEl.textContent = 'Enter your name.'; return; }
+    if (!codeVal) { errEl.textContent = 'Enter your room code.'; return; }
+    if (!key)     { errEl.textContent = 'Enter your password.'; return; }
+
+    const stored = localStorage.getItem('jeo_room_pass_' + codeVal);
+    if (stored === null) {
+        errEl.textContent = 'Room not found on this device. Use the device where you created it, or start a new game.';
+    } else if (stored === key) {
+        _roomCode = codeVal;
+        localStorage.setItem('jeo_room_code', _roomCode);
+        hostName = nameVal;
+        sessionStorage.setItem('dashboard_host_name', nameVal);
+        sessionStorage.setItem('dashboard_unlocked_' + _roomCode, '1');
+        initDashboard();
+    } else {
+        errEl.textContent = 'Incorrect password.';
+    }
 }
+
+function createRoom() {
+    const nameVal = document.getElementById('new-host-name').value.trim();
+    const key     = document.getElementById('new-pass-in').value;
+    const errEl   = document.getElementById('auth-err-new');
+    errEl.textContent = '';
+    if (!nameVal) { errEl.textContent = 'Enter your name.'; return; }
+    if (!key)     { errEl.textContent = 'Set a password.'; return; }
+
+    _roomCode = _genRoomCode();
+    localStorage.setItem('jeo_room_code', _roomCode);
+    localStorage.setItem('jeo_room_pass_' + _roomCode, key);
+    hostName = nameVal;
+    sessionStorage.setItem('dashboard_host_name', nameVal);
+    sessionStorage.setItem('dashboard_unlocked_' + _roomCode, '1');
+    initDashboard();
+}
+
 document.getElementById('pass-in').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+// Pre-fill room code from localStorage if available
+const _savedRoom = localStorage.getItem('jeo_room_code');
+if (_savedRoom) document.getElementById('room-code-in').value = _savedRoom;
+if (sessionStorage.getItem('dashboard_unlocked_' + _roomCode)) { initDashboard(); }
 
-// Auto-unlock when returning from OAuth redirect (password already verified this session)
-if (sessionStorage.getItem('dashboard_unlocked')) { initDashboard(); }
-
-// ── TWITCH OAUTH (Implicit Grant) ────────────────────────────────────────────
-function startTwitchAuth() {
-    const state = randomStr(16);
-    try { localStorage.setItem('oauth_state', state); } catch(e) { log('Warning: localStorage unavailable — state check skipped.'); }
-    const p = new URLSearchParams({
-        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI,
-        response_type: 'token', scope: SCOPES,
-        force_verify: 'false', state
-    });
-    log('Redirecting to Twitch auth…');
-    window.location.href = `https://id.twitch.tv/oauth2/authorize?${p}`;
-}
-
-function handleOAuthCallback() {
-    // Implicit grant returns token in URL fragment (#access_token=...&state=...)
-    if (!window.location.hash) return Promise.resolve();
-    const fragment      = new URLSearchParams(window.location.hash.substring(1));
-    const token         = fragment.get('access_token');
-    const returnedState = fragment.get('state');
-    if (!token) return Promise.resolve();
-
-    if (returnedState !== localStorage.getItem('oauth_state')) {
-        alert('OAuth state mismatch — possible CSRF attempt. Please try connecting again.');
-        window.history.replaceState({}, '', window.location.pathname);
-        return Promise.resolve();
-    }
-
-    localStorage.setItem('twitch_token', token);
-    localStorage.removeItem('oauth_state');
-    twitchToken = token;
-    // Clean the token out of the URL immediately
-    window.history.replaceState({}, '', window.location.pathname);
-    return Promise.resolve();
-}
-
-async function checkTwitchSession() {
-    if (!twitchToken) return;
-    const res = await fetch('https://id.twitch.tv/oauth2/validate', {
-        headers: { 'Authorization': `OAuth ${twitchToken}` }
-    });
-    if (!res.ok) {
-        handleTwitchExpiry();
-        return;
-    }
-    const data = await res.json();
-    const requiredScopes = ['moderator:read:followers', 'chat:read', 'chat:edit'];
-    const granted = new Set(data.scopes || []);
-    const missing = requiredScopes.filter(s => !granted.has(s));
-    if (missing.length) {
-        handleTwitchExpiry();
-        log(`Reconnect Twitch to enable chat replies (missing scopes: ${missing.join(', ')}).`);
-        return;
-    }
-    await setupTwitch(data.login);
-}
-
-async function setupTwitch(loginName) {
-    if (!broadcasterId) {
-        const res  = await fetch(`https://api.twitch.tv/helix/users?login=${BROADCASTER}`, {
-            headers: { 'Authorization': `Bearer ${twitchToken}`, 'Client-Id': CLIENT_ID }
-        });
-        const data = await res.json();
-        broadcasterId = data.data?.[0]?.id;
-        if (broadcasterId) localStorage.setItem('broadcaster_id', broadcasterId);
-    }
-    document.getElementById('tw-connect').style.display   = 'none';
-    document.getElementById('tw-connected').style.display = '';
-    document.getElementById('tw-user').innerText = loginName || 'Host';
-    document.getElementById('tw-chan').innerText = BROADCASTER;
-    document.getElementById('tw-dot').classList.add('on');
-    twitchLogin = loginName || null;
-    if (twitchLogin) localStorage.setItem('twitch_login', twitchLogin);
-    // Reconnect IRC as authenticated so we can send chat replies when needed.
-    initTMI();
-    // Claim or update chat now that we have a real username.
-    chatPrimaryRef.transaction(current => {
-        if (!current || current === null || typeof current === 'string' || current.sessionId === SESSION_ID) {
-            return { sessionId: SESSION_ID, username: twitchLogin };
-        }
-        return current; // someone else owns it — don't steal
-    }).then(result => {
-        const val = result.snapshot.val();
-        isChatPrimary = (val?.sessionId === SESSION_ID);
-        updateChatStatus(val?.username || '', val?.sessionId || '');
-        if (isChatPrimary) log(`This dashboard (@${twitchLogin}) has chat.`);
-    });
-    refreshFollowersOnlyState();
-    log('Twitch session active.');
-}
-
-function clearTwitchSession() {
-    ['twitch_token', 'broadcaster_id', 'twitch_login'].forEach(k => localStorage.removeItem(k));
-    twitchToken = null; broadcasterId = null; twitchLogin = null;
-    userIdCache.clear();
-    lastBotReplyAt.clear();
-}
-
-function handleTwitchExpiry() {
-    if (isChatPrimary) { chatPrimaryRef.set(null); isChatPrimary = false; }
-    clearTwitchSession();
-    document.getElementById('tw-connect').style.display   = '';
-    document.getElementById('tw-connected').style.display = 'none';
-    document.getElementById('tw-dot').classList.remove('on');
-    updateChatStatus('', '');
-    refreshFollowersOnlyState();
-    log('Twitch token expired \u2014 click Connect to re-authenticate.');
-}
+// (Twitch OAuth removed — web player version)
 
 function addTickerRow(text) {
     const wrap = document.getElementById('stg-ticker-msgs');
@@ -1225,144 +1105,8 @@ function addTickerRow(text) {
     wrap.appendChild(row);
 }
 
-function updateGuessCommand() {} // stub — replaced by applySettings
+function updateGuessCommand() {} // stub
 
-function refreshFollowersOnlyState() {
-    const cb    = document.getElementById('followers-only');
-    const label = document.getElementById('followers-only-label');
-    const hasTwitch = !!(twitchToken && twitchLogin);
-    if (cb)    { cb.disabled = !hasTwitch; }
-    if (label) { label.style.opacity = hasTwitch ? '' : '0.45'; }
-}
-
-function updateFollowersOnly() {
-    const checked = document.getElementById('followers-only').checked;
-    // Sync change to Firebase so all dashboards agree
-    log(`Followers-only toggled → ${checked}. Writing to Firebase…`);
-    db.ref('boardState/hostSettings/followersOnly').set(checked)
-        .then(() => log(`Firebase write OK: followersOnly = ${checked}`))
-        .catch(e => log(`Firebase write FAILED: ${e.message}`));
-}
-
-function disconnectTwitch() {
-    // Release the chat claim so another connected dashboard can pick it up
-    if (isChatPrimary) {
-        chatPrimaryRef.set(null);
-        isChatPrimary = false;
-    }
-    clearTwitchSession();
-    document.getElementById('tw-connect').style.display   = '';
-    document.getElementById('tw-connected').style.display = 'none';
-    document.getElementById('tw-dot').classList.remove('on');
-    updateChatStatus('', '');
-    refreshFollowersOnlyState();
-    log('Twitch disconnected.');
-}
-
-// ── MULTI-HOST: Chat Active ──────────────────────────────────────────────────
-// Firebase node: boardState/hostSettings/chatPrimary = { sessionId, username } | null
-// Chat is claimed on Twitch connect, released on disconnect/expiry.
-// All dashboards observe who owns it by username.
-
-function showTwWarn(msg) {
-    const el = document.getElementById('tw-warn-banner');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.display = 'block';
-}
-function hideTwWarn() {
-    const el = document.getElementById('tw-warn-banner');
-    if (el) el.style.display = 'none';
-}
-
-function updateChatStatus(ownerUsername, ownerSessionId) {
-    const nameEl   = document.getElementById('chat-active-name');
-    const hdrEl    = document.getElementById('hdr-chat-user');
-    const claimBtn = document.getElementById('claim-btn');
-    const hasTwitch = !!(twitchToken && twitchLogin);
-
-    if (ownerSessionId === SESSION_ID) {
-        // This dashboard owns chat
-        const label = `@${ownerUsername}`;
-        nameEl.textContent = label + ' (you)';
-        nameEl.className   = 'chat-user is-me';
-        if (hdrEl) { hdrEl.textContent = label; hdrEl.style.color = '#00c864'; }
-        claimBtn.style.display = 'none';
-        if (!hasTwitch) {
-            showTwWarn('\u26a0\ufe0f You have chat but Twitch is not connected. Chat messages and follower checks will not work.');
-        } else {
-            hideTwWarn();
-        }
-    } else if (ownerUsername) {
-        // Someone else owns chat
-        const label = `@${ownerUsername}`;
-        nameEl.textContent = label;
-        nameEl.className   = 'chat-user is-other';
-        if (hdrEl) { hdrEl.textContent = label; hdrEl.style.color = 'var(--yellow)'; }
-        claimBtn.style.display = hasTwitch ? '' : 'none';
-        hideTwWarn();
-    } else {
-        // Nobody owns chat
-        nameEl.textContent = '\u2014';
-        nameEl.className   = 'chat-user is-none';
-        if (hdrEl) { hdrEl.textContent = '\u2014'; hdrEl.style.color = 'var(--dim)'; }
-        claimBtn.style.display = hasTwitch ? '' : 'none';
-        if (!hasTwitch) {
-            showTwWarn('\u26a0\ufe0f Connect your Twitch account to claim chat.');
-        } else {
-            hideTwWarn();
-        }
-    }
-}
-
-function claimChatPrimary() {
-    if (!twitchToken || !twitchLogin) {
-        showTwWarn('\u26a0\ufe0f Connect your Twitch account before claiming chat.');
-        return;
-    }
-    chatPrimaryRef.set({ sessionId: SESSION_ID, username: twitchLogin }).then(() => {
-        isChatPrimary = true;
-        updateChatStatus(twitchLogin, SESSION_ID);
-        log(`This dashboard (@${twitchLogin}) now has chat.`);
-    });
-}
-
-function releaseChatPrimary() {
-    if (!isChatPrimary) return; // helper dashboards never touch the node
-    chatPrimaryRef.set(null);
-}
-
-function listenChatPrimary() {
-    chatPrimaryRef.on('value', snap => {
-        const data = snap.val();
-        if (typeof data === 'string') { chatPrimaryRef.set(null); return; }
-        if (!data) {
-            isChatPrimary = false;
-            updateChatStatus('', '');
-        } else {
-            isChatPrimary = (data.sessionId === SESSION_ID);
-            updateChatStatus(data.username || '', data.sessionId || '');
-        }
-    });
-}
-
-// ── MULTI-HOST: Shared Followers-Only ──────────────────────────────────────
-function listenFollowersOnly() {
-    db.ref('boardState/hostSettings/followersOnly').on('value', snap => {
-        const val = snap.val();
-        log(`Firebase followersOnly received: ${val}`);
-        if (val === null) return; // not yet written
-        const cb = document.getElementById('followers-only');
-        if (!cb) return;
-        // Only sync checkbox value — never disconnect Twitch or change interactivity from a remote change
-        if (cb.checked !== val) {
-            log(`Syncing checkbox to ${val}`);
-            cb.checked = val;
-        }
-    });
-}
-
-// ── MULTI-HOST: Shared Timer Settings ────────────────────────────────────────
 function listenTimerSettings() {
     db.ref('boardState/hostSettings').on('value', snap => {
         const val = snap.val();
@@ -1395,11 +1139,6 @@ function listenTimerSettings() {
         }
         if (val.penaltyDD !== undefined && val.penaltyDD !== penaltyDD) {
             penaltyDD = val.penaltyDD; changed = true;
-        }
-        if (val.guessCommand !== undefined && val.guessCommand !== guessCommand) {
-            guessCommand = val.guessCommand;
-            localStorage.setItem('cfg_guess_cmd', guessCommand);
-            changed = true;
         }
         const incomingMsgs = val.tickerMessages
             ? (Array.isArray(val.tickerMessages) ? val.tickerMessages : Object.values(val.tickerMessages)).filter(Boolean)
@@ -1450,7 +1189,6 @@ function listenTimerSettings() {
             document.getElementById('stg-penalty-dd').checked       = penaltyDD;
             document.getElementById('stg-penalty-regular').checked  = penaltyRegular;
             document.getElementById('stg-penalty-dd').checked       = penaltyDD;
-            document.getElementById('stg-guess-cmd').value          = guessCommand;
             document.getElementById('stg-ticker-interval').value     = tickerInterval;
             document.getElementById('stg-ticker-msgs').innerHTML     = '';
             tickerMessages.forEach(m => addTickerRow(m));
@@ -1458,39 +1196,7 @@ function listenTimerSettings() {
     });
 }
 
-// ── CATEGORY SUGGESTIONS ────────────────────────────────────────────────────
-function listenCategorySubmissions() {
-    db.ref('boardState/categorySubmissions').on('value', snap => {
-        categorySubmissions = snap.val() || {};
-        renderCategorySubmissions();
-    });
-}
 
-function renderCategorySubmissions() {
-    const el      = document.getElementById('cat-suggestions');
-    const entries = Object.entries(categorySubmissions);
-    if (!entries.length) {
-        el.innerHTML = '<div style="color:var(--dim);font-size:0.82rem;">No suggestions yet. Viewers type !cat [name] in chat.</div>';
-        return;
-    }
-    el.innerHTML = entries.map(([key, val]) =>
-        `<div class="cat-item">
-            <div>
-                <div class="cat-name">${escapeHtml(val.category)}</div>
-                <div class="cat-user">@${escapeHtml(val.username)}</div>
-            </div>
-            <button class="cat-remove" onclick="removeCategorySubmission('${key}')" title="Remove">✕</button>
-        </div>`
-    ).join('');
-}
-
-function removeCategorySubmission(key) {
-    db.ref(`boardState/categorySubmissions/${key}`).remove();
-}
-
-function clearAllCategories() {
-    db.ref('boardState/categorySubmissions').set(null);
-}
 
 // ── MULTI-HOST: Shared Pending Guess ─────────────────────────────────────────
 function listenPendingGuess() {
@@ -1527,245 +1233,7 @@ function listenPendingGuess() {
     });
 }
 
-// ── TWITCH IRC (native WebSocket — no CDN dependency) ───────────────────────
-function parseTwitchIRC(raw) {
-    let tagsStr = '', rest = raw;
-    if (raw.startsWith('@')) {
-        const sp = raw.indexOf(' ');
-        tagsStr = raw.slice(1, sp);
-        rest    = raw.slice(sp + 1);
-    }
-    const tags = {};
-    tagsStr.split(';').forEach(t => { const eq = t.indexOf('='); if (eq > -1) tags[t.slice(0, eq)] = t.slice(eq + 1); });
-    const m = rest.match(/^:([^!]+)!\S+@\S+ PRIVMSG (#\S+) :(.+)$/);
-    if (!m) return null;
-    const nick = m[1];
-    return {
-        channel: m[2],
-        message: m[3],
-        tags: {
-            'display-name': tags['display-name'] || nick,
-            'username': nick,
-            'user-id': tags['user-id'] || ''
-        }
-    };
-}
-
-function initTMI() {
-    if (tmiClient) { tmiClient.close(); tmiClient = null; }
-    const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
-    let joinedChannel = false;
-    ws.onopen = () => {
-        tmiRetryDelay = 2000; // reset backoff on successful open
-        const canAuth = Boolean(twitchToken && twitchLogin);
-        ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
-        if (canAuth) {
-            const nick = twitchLogin.toLowerCase().replace(/[^a-z0-9_]/g, '') || `justinfan${Math.floor(Math.random() * 899999 + 100000)}`;
-            ws.send(`PASS oauth:${twitchToken}`);
-            ws.send(`NICK ${nick}`);
-        } else {
-            ws.send('PASS SCHMOOPIIE');
-            ws.send(`NICK justinfan${Math.floor(Math.random() * 899999 + 100000)}`);
-        }
-        ws.send(`JOIN #${BROADCASTER}`);
-        if (!canAuth) {
-            pendingChatMessages = []; // discard — can't send as anonymous
-        }
-    };
-    ws.onmessage = e => {
-        e.data.split('\r\n').filter(Boolean).forEach(line => {
-            if (line.startsWith('PING')) { ws.send('PONG :tmi.twitch.tv'); return; }
-            if (line.includes(' NOTICE ')) {
-                const noticeMatch = line.match(/NOTICE [^ ]+ :(.+)$/);
-                if (noticeMatch) log(`Twitch IRC notice: ${noticeMatch[1]}`);
-            }
-            // Wait for Twitch to confirm the JOIN before sending anything
-            if (!joinedChannel && line.includes(`JOIN #${BROADCASTER}`)) {
-                joinedChannel = true;
-                tmiRetryDelay = 2000; // reset backoff on confirmed JOIN
-                const canAuth = Boolean(twitchToken && twitchLogin);
-                if (canAuth) {
-                    log(`Twitch connected. Listening on #${BROADCASTER} (bot replies enabled).`);
-                    // Now it's safe to flush queued messages
-                    pendingChatMessages.splice(0).forEach(text => {
-                        ws.send(`PRIVMSG #${BROADCASTER} :${text}`);
-                        log(`→ Chat sent (queued): ${text}`);
-                    });
-                } else {
-                    log(`Twitch connected. Listening on #${BROADCASTER} (read-only mode).`);
-                }
-            }
-            const parsed = parseTwitchIRC(line);
-            if (parsed) onChat(parsed.channel, parsed.tags, parsed.message);
-        });
-    };
-    ws.onerror = () => {
-        log(`Chat connection error — retrying in ${tmiRetryDelay / 1000}s…`);
-    };
-    ws.onclose = () => {
-        if (tmiClient !== ws) return; // socket was intentionally replaced — don't retry
-        tmiClient = null;
-        const delay = tmiRetryDelay;
-        tmiRetryDelay = Math.min(tmiRetryDelay * 2, 30000); // double, cap at 30s
-        setTimeout(() => {
-            if (tmiClient) return; // another initTMI() already fired
-            log(`Reconnecting to Twitch chat…`);
-            initTMI();
-        }, delay);
-    };
-    tmiClient = ws;
-}
-
-function shareSourceToChat(linkId) {
-    const link = document.getElementById(linkId);
-    const url  = link?.getAttribute('href');
-    if (!url || url === '#') { log('No URL to share.'); return; }
-    sendChatMessage(url);
-    log(`Shared source URL to chat: ${url}`);
-}
-
-function sendChatMessage(text) {
-    if (!isChatPrimary) return; // only the active chat dashboard sends messages
-    if (!twitchToken || !twitchLogin) {
-        showTwWarn('\u26a0\ufe0f Chat message not sent \u2014 Twitch is not connected. Reconnect your Twitch account to send messages.');
-        log('Chat reply skipped: Twitch not connected.');
-        return;
-    }
-    const safe = String(text || '').replace(/[\r\n]+/g, ' ').trim();
-    if (!safe) return;
-    if (!tmiClient || tmiClient.readyState !== WebSocket.OPEN) {
-        // Socket is still connecting — queue the message to send on open
-        pendingChatMessages.push(safe);
-        log(`→ Chat queued (socket connecting): ${safe}`);
-        return;
-    }
-    tmiClient.send(`PRIVMSG #${BROADCASTER} :${safe}`);
-    log(`→ Chat sent: ${safe}`);
-}
-
-async function onChat(channel, tags, message) {
-    if (!isChatPrimary) return; // helper dashboards ignore incoming guesses entirely
-    const msg      = message.trim();
-    const username = tags['display-name'] || tags['username'] || '';
-
-    // ── Handle !cat category suggestion ─────────────────────────────────────
-    if (msg.toLowerCase().startsWith('!cat')) {
-        const catText = msg.slice(4).trim();
-        if (catText) {
-            const catLower = catText.toLowerCase();
-            const exists = Object.values(categorySubmissions).some(v => v.category.toLowerCase() === catLower);
-            if (!exists) {
-                db.ref('boardState/categorySubmissions').push({ category: catText, username });
-            }
-        }
-        return;
-    }
-
-    // ── Handle !wager for Daily Double ───────────────────────────────────────
-    if (msg.toLowerCase().startsWith('!wager') && activeClue?.status === 'daily-double') {
-        const ddp = (activeClue.ddPlayer || '').toLowerCase();
-        if (!ddp || username.toLowerCase() === ddp) {
-            processDDWager(username, msg.slice(6).trim());
-        }
-        return;
-    }
-
-    if (!msg.toLowerCase().startsWith(guessCommand.toLowerCase())) return;
-
-    const guessText = msg.slice(guessCommand.length).trim();
-    if (!guessText) return;
-    if (!activeClue || (activeClue.status !== 'active' && activeClue.status !== 'daily-double-active')) {
-        if (currentScreen === 'firstq' && firstQuestionData) {
-            await handleFirstQuestionGuess(username, tags, guessText);
-        }
-        return;
-    }
-
-    // For Daily Double: only the designated player may submit a guess
-    if (activeClue.status === 'daily-double-active' &&
-        username.toLowerCase() !== (activeClue.ddPlayer || '').toLowerCase()) return;
-
-    const login = (tags['username'] || username || '').toLowerCase();
-    if (wrongGuessers.has(username.toLowerCase())) return;
-    // Don't let the same user pile up multiple queued guesses
-    if (guessQueue.some(g => g.username.toLowerCase() === username.toLowerCase())) return;
-
-    const followersOnly = document.getElementById('followers-only')?.checked ?? true;
-    if (followersOnly && twitchToken) {
-        // Only enforce follower check when actually connected to Twitch
-        const allowed = await isFollower(tags['user-id'], login || username.toLowerCase());
-        if (!allowed) {
-            log(`${username} guessed — not a follower, ignored.`);
-            const key = username.toLowerCase();
-            const now = Date.now();
-            const last = lastBotReplyAt.get(key) || 0;
-            if (now - last > 10000) {
-                sendChatMessage(`@${username} !guess is only enabled for followers right now.`);
-                lastBotReplyAt.set(key, now);
-            }
-            return;
-        }
-    } else if (followersOnly && !twitchToken) {
-        log('Followers-only enabled but Twitch auth missing; allowing guess (verification unavailable).');
-    }
-
-    if (pendingGuess) {
-        // Block new entries once the timer has expired
-        if (timerExpired) return;
-        guessQueue.push({ username, text: guessText });
-        db.ref('boardState/hostSettings/guessQueue').set(guessQueue);
-        log(`Guess queued: ${username} → "${guessText}" (${guessQueue.length} in queue)`);
-        updateQueueIndicator();
-        return;
-    }
-
-    // Also block becoming the active guess if the timer already expired
-    if (timerExpired) return;
-
-    pendingGuess = { username, text: guessText };
-    db.ref('boardState/hostSettings/pendingGuess').set(pendingGuess);
-    showPending(pendingGuess);
-    log(`Guess locked: ${username} → "${guessText}"`);
-}
-
-// ── FOLLOWER CHECK ────────────────────────────────────────────────────────────
-async function resolveUserIdByLogin(login) {
-    if (!login) return null;
-    if (userIdCache.has(login)) return userIdCache.get(login);
-    const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`,
-        { headers: { 'Authorization': `Bearer ${twitchToken}`, 'Client-Id': CLIENT_ID } });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const id = data.data?.[0]?.id || null;
-    if (id) userIdCache.set(login, id);
-    return id;
-}
-
-async function isFollower(userId, login) {
-    if (!broadcasterId || !twitchToken) return false;
-    try {
-        let effectiveUserId = /^\d+$/.test(String(userId || '')) ? String(userId) : null;
-        if (!effectiveUserId) {
-            effectiveUserId = await resolveUserIdByLogin(login);
-        }
-        if (!effectiveUserId) return false;
-
-        let res = await fetch(
-            `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${effectiveUserId}`,
-            { headers: { 'Authorization': `Bearer ${twitchToken}`, 'Client-Id': CLIENT_ID } }
-        );
-        if (res.status === 401) {
-            // Token expired mid-game — update UI and allow guess through rather than silently breaking
-            log('⚠️ Twitch token expired during follower check — reconnect Twitch to restore follower enforcement.');
-            handleTwitchExpiry();
-            return true; // allow guess — don't punish the player for a host auth issue
-        }
-        const data   = await res.json();
-        return Array.isArray(data.data) && data.data.length > 0;
-    } catch { return false; }
-}
-
-// ── FUZZY MATCH ───────────────────────────────────────────────────────────────
+// FUZZY MATCH ───────────────────────────────────────────────────────────────
 function levenshtein(a, b) {
     const m = a.length, n = b.length;
     const d = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => i || j));
@@ -2025,28 +1493,10 @@ function judgeGuess(correct) {
 }
 
 // ── FIRST QUESTION ────────────────────────────────────────────────────────────
-async function handleFirstQuestionGuess(username, tags, guessText) {
-    if (lastCorrectAnswerer) return;  // already answered correctly — no more guesses accepted
+function handleFirstQuestionGuess(username, guessText) {
+    if (lastCorrectAnswerer) return;
     if (wrongGuessers.has(username.toLowerCase())) return;
     if (guessQueue.some(g => g.username.toLowerCase() === username.toLowerCase())) return;
-
-    const login = (tags['username'] || username || '').toLowerCase();
-    const followersOnly = document.getElementById('followers-only')?.checked ?? true;
-    if (followersOnly && twitchToken) {
-        const allowed = await isFollower(tags['user-id'], login || username.toLowerCase());
-        if (!allowed) {
-            log(`${username} guessed (First Q) — not a follower, ignored.`);
-            const key = username.toLowerCase();
-            const now = Date.now();
-            if (now - (lastBotReplyAt.get(key) || 0) > 10000) {
-                sendChatMessage(`@${username} !guess is only enabled for followers right now.`);
-                lastBotReplyAt.set(key, now);
-            }
-            return;
-        }
-    } else if (followersOnly && !twitchToken) {
-        log('Followers-only enabled but Twitch auth missing; allowing First Q guess (verification unavailable).');
-    }
 
     if (pendingGuess) {
         guessQueue.push({ username, text: guessText });
@@ -2256,15 +1706,13 @@ function startWagerTimer(player, timeout) {
             clearWagerTimer();
             if (!activeClue || activeClue.status !== 'daily-double') return;
             log(`⏱ ${player} wager timed out — proceeding as normal clue.`);
-            if (isChatPrimary) {
-                db.ref('activeClue').set({
+            db.ref('activeClue').set({
                     status: 'active',
                     tileId: activeClue.tileId,
                     value: activeClue.value, category: activeClue.category,
                     question: activeClue.question, answer: activeClue.answer || '',
                     timerEnabled, timerSeconds
                 });
-            }
         }
     }, 1000);
 }
@@ -2278,7 +1726,7 @@ function processDDWager(username, amtStr) {
     const { min, max } = calcWagerLimits(username, activeClue.value);
     const amt = parseInt(amtStr, 10);
     if (isNaN(amt) || amt < min || amt > max) {
-        sendChatMessage(`@${username} Invalid wager. Min: $${min}, Max: $${max}. Type !wager [amount].`);
+        log(`${username} invalid wager. Min: $${min}, Max: $${max}.`);
         return;
     }
     clearWagerTimer();
@@ -2293,7 +1741,7 @@ function processDDWager(username, amtStr) {
         timerEnabled, timerSeconds,
         clueStartedAt: Date.now()
     });
-    sendChatMessage(`@${username} Wager of $${amt} locked in! Answer with !guess.`);
+    log(`${username} wager of $${amt} locked in!`);
 }
 
 function forceDDSkip() {
@@ -2434,7 +1882,7 @@ function initListeners() {
                 clueScorers = []; // reset scorer list for new DD
                 startWagerTimer(data.ddPlayer, data.ddWagerTimeout);
                 const lim = calcWagerLimits(data.ddPlayer || '', data.value);
-                sendChatMessage(`@${data.ddPlayer} You hit a Power Play! Type !wager [amount]. Min: $${lim.min}, Max: $${lim.max}. You have ${data.ddWagerTimeout} seconds!`);
+                log(`Power Play! ${data.ddPlayer} has ${data.ddWagerTimeout}s to wager. Min: $${lim.min}, Max: $${lim.max}.`);
             }
         } else {
             activeClue = data;
@@ -2708,7 +2156,6 @@ function openSettings() {
     document.getElementById('stg-dd-opts').style.display    = ddEnabled ? 'block' : 'none';
     document.getElementById('stg-penalty-regular').checked  = penaltyRegular;
     document.getElementById('stg-penalty-dd').checked       = penaltyDD;
-    document.getElementById('stg-guess-cmd').value          = guessCommand;
     document.getElementById('stg-ticker-interval').value     = tickerInterval;
     document.getElementById('stg-ticker-msgs').innerHTML     = '';
     tickerMessages.forEach(m => addTickerRow(m));
@@ -2732,15 +2179,13 @@ function applySettings() {
     ddWagerTimeout = Math.min(120, Math.max(10, parseInt(document.getElementById('stg-dd-wager-timeout').value, 10) || 60));
     penaltyRegular = document.getElementById('stg-penalty-regular').checked;
     penaltyDD      = document.getElementById('stg-penalty-dd').checked;
-    guessCommand   = document.getElementById('stg-guess-cmd').value.trim() || '!guess';
     tickerMessages = [...document.querySelectorAll('#stg-ticker-msgs .ticker-row input')].map(i => i.value.trim()).filter(Boolean);
     tickerInterval = Math.min(60, Math.max(2, parseInt(document.getElementById('stg-ticker-interval').value, 10) || 5));
     localStorage.setItem('cfg_timer_on',   timerEnabled ? '1' : '0');
     localStorage.setItem('cfg_timer_secs', String(timerSeconds));
-    localStorage.setItem('cfg_guess_cmd',  guessCommand);
     localStorage.setItem('cfg_ticker_msgs', JSON.stringify(tickerMessages));
     localStorage.setItem('cfg_ticker_secs', String(tickerInterval));
-    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds, ddEnabled, ddCount, ddWagerTimeout, penaltyRegular, penaltyDD, guessCommand, tickerMessages, tickerInterval });
+    db.ref('boardState/hostSettings').update({ timerEnabled, timerSeconds, ddEnabled, ddCount, ddWagerTimeout, penaltyRegular, penaltyDD, tickerMessages, tickerInterval });
 
     // (Re)assign Daily Doubles on the board if the game hasn't started yet
     if (!gameStarted) {
@@ -2763,7 +2208,7 @@ function applySettings() {
     }
 
     closeModal('settings-modal');
-    log(`Settings saved. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}. Power Plays: ${ddEnabled ? ddCount + ' per board' : 'off'}. Guess command: ${guessCommand}.`);
+    log(`Settings saved. Timer: ${timerEnabled ? timerSeconds + 's per clue' : 'off'}. Power Plays: ${ddEnabled ? ddCount + ' per board' : 'off'}.`);
 }
 
 
@@ -2881,8 +2326,84 @@ function saveLCA() {
 
 function triggerOBSRefresh() {
     db.ref('refreshTrigger').set(Date.now());
-    window.open('https://silverfrail.github.io/jeopardy/jeopardy_preview.html', '_blank');
+    window.open('jeopardy_preview.html?room=' + encodeURIComponent(_roomCode), '_blank');
     log('OBS refresh triggered & preview opened.');
+}
+
+function copyRoomCode() {
+    navigator.clipboard.writeText(_roomCode).then(() => {
+        const btn = document.getElementById('hdr-room-copy');
+        if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = orig, 1500); }
+    });
+}
+
+function newRoom() {
+    if (!confirm('Generate a new room code?\n\nThis will disconnect any players currently in room ' + _roomCode + '. You will need to share the new code with your players.')) return;
+    const oldCode = _roomCode;
+    _roomCode = _genRoomCode();
+    localStorage.setItem('jeo_room_code', _roomCode);
+    sessionStorage.removeItem('dashboard_unlocked_' + oldCode);
+    const rcEl = document.getElementById('hdr-room-code');
+    if (rcEl) rcEl.textContent = _roomCode;
+    log('New room created: ' + _roomCode);
+}
+
+// WEB PLAYER GUESS INBOX
+function processGuess(data) {
+    const { username, text, type, amount } = data || {};
+    if (!username) return;
+
+    if (type === 'wager') {
+        if (activeClue?.status === 'daily-double') {
+            processDDWager(username, String(amount ?? ''));
+        }
+        return;
+    }
+
+    if (type === 'category') return; // suggestions panel removed
+
+    if (!text) return;
+
+    if (!activeClue || (activeClue.status !== 'active' && activeClue.status !== 'daily-double-active')) {
+        if (currentScreen === 'firstq' && firstQuestionData) {
+            handleFirstQuestionGuess(username, text);
+        }
+        return;
+    }
+
+    if (activeClue.status === 'daily-double-active' &&
+        username.toLowerCase() !== (activeClue.ddPlayer || '').toLowerCase()) return;
+
+    if (wrongGuessers.has(username.toLowerCase())) return;
+    if (guessQueue.some(g => g.username.toLowerCase() === username.toLowerCase())) return;
+    if (timerExpired) return;
+
+    if (pendingGuess) {
+        guessQueue.push({ username, text });
+        db.ref('boardState/hostSettings/guessQueue').set(guessQueue);
+        log(`Guess queued: ${username} → "${text}" (${guessQueue.length} in queue)`);
+        updateQueueIndicator();
+        return;
+    }
+
+    pendingGuess = { username, text };
+    db.ref('boardState/hostSettings/pendingGuess').set(pendingGuess);
+    showPending(pendingGuess);
+    log(`Guess locked: ${username} → "${text}"`);
+}
+
+function listenGuessInbox() {
+    db.ref('guessInbox').orderByChild('timestamp').startAt(Date.now()).on('child_added', snap => {
+        const data = snap.val();
+        if (!data) return;
+        snap.ref.transaction(current => {
+            if (current === null) return;
+            return null;
+        }).then(result => {
+            if (!result.committed) return;
+            processGuess(data);
+        });
+    });
 }
 </script>
 </body>
