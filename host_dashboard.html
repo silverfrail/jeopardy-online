@@ -1047,19 +1047,35 @@ function unlock() {
     if (!codeVal) { errEl.textContent = 'Enter your room code.'; return; }
     if (!key)     { errEl.textContent = 'Enter your password.'; return; }
 
-    const stored = localStorage.getItem('jeo_room_pass_' + codeVal);
-    if (stored === null) {
-        errEl.textContent = 'Room not found on this device. Use the device where you created it, or start a new game.';
-    } else if (stored === key) {
+    function doUnlock() {
         _roomCode = codeVal;
         localStorage.setItem('jeo_room_code', _roomCode);
         hostName = nameVal;
         sessionStorage.setItem('dashboard_host_name', nameVal);
         sessionStorage.setItem('dashboard_unlocked_' + _roomCode, '1');
         initDashboard();
-    } else {
-        errEl.textContent = 'Incorrect password.';
     }
+
+    // Check Firebase first so any host can join from any device
+    _baseDb.ref('rooms/' + codeVal + '/roomPassword').once('value').then(snap => {
+        const stored = snap.val();
+        if (stored !== null) {
+            if (stored === key) doUnlock();
+            else errEl.textContent = 'Incorrect password.';
+        } else {
+            // Fall back to localStorage (rooms created before Firebase storage)
+            const local = localStorage.getItem('jeo_room_pass_' + codeVal);
+            if (!local)        { errEl.textContent = 'Room not found. Check the room code or start a new game.'; return; }
+            if (local !== key) { errEl.textContent = 'Incorrect password.'; return; }
+            doUnlock();
+        }
+    }).catch(() => {
+        // Firebase unavailable — try localStorage only
+        const local = localStorage.getItem('jeo_room_pass_' + codeVal);
+        if (!local)        { errEl.textContent = 'Room not found on this device.'; return; }
+        if (local !== key) { errEl.textContent = 'Incorrect password.'; return; }
+        doUnlock();
+    });
 }
 
 function createRoom() {
@@ -1073,6 +1089,8 @@ function createRoom() {
     _roomCode = _genRoomCode();
     localStorage.setItem('jeo_room_code', _roomCode);
     localStorage.setItem('jeo_room_pass_' + _roomCode, key);
+    // Store in Firebase so co-hosts on other devices can unlock the same room
+    _baseDb.ref('rooms/' + _roomCode + '/roomPassword').set(key).catch(() => {});
     hostName = nameVal;
     sessionStorage.setItem('dashboard_host_name', nameVal);
     sessionStorage.setItem('dashboard_unlocked_' + _roomCode, '1');
