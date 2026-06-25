@@ -70,11 +70,9 @@
         #board-wrap {
             flex: 1;
             min-height: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             overflow: hidden;
             background: #000;
+            position: relative;
         }
         #canvas {
             width: 1920px;
@@ -82,7 +80,7 @@
             background: radial-gradient(ellipse at 50% -5%, #0d1038 0%, #03030c 55%);
             display: flex;
             flex-direction: column;
-            position: relative;
+            position: absolute;
             transform-origin: top left;
         }
 
@@ -212,7 +210,7 @@
         #ctrl-idle .idle-room { color: rgba(255,255,255,0.2); font-size: 0.8rem; text-align: center; }
 
         /* Guess state */
-        #ctrl-guess input, #ctrl-wager input, #ctrl-cat input {
+        #ctrl-guess input, #ctrl-wager input {
             flex: 1;
             padding: 12px 16px;
             font-size: 1.1rem;
@@ -224,7 +222,6 @@
         }
         #ctrl-guess input:focus { border-color: var(--blue); }
         #ctrl-wager input:focus { border-color: var(--yellow); }
-        #ctrl-cat   input:focus { border-color: var(--green); }
 
         .ctrl-btn {
             padding: 12px 22px;
@@ -239,11 +236,9 @@
         .ctrl-btn:hover { opacity: 0.85; }
         .btn-blue   { background: var(--blue);   color: #fff; }
         .btn-yellow { background: var(--yellow); color: #000; }
-        .btn-green  { background: var(--green);  color: #000; }
 
         #ctrl-guess .ctrl-label { color: rgba(255,255,255,0.5); font-size: 0.85rem; white-space: nowrap; }
         #ctrl-wager .ctrl-label { color: var(--yellow); font-size: 0.85rem; white-space: nowrap; }
-        #ctrl-cat   .ctrl-label { color: var(--green);  font-size: 0.85rem; white-space: nowrap; }
 
         .ctrl-sub { font-size: 0.85rem; color: rgba(255,255,255,0.35); text-align: center; width: 100%; margin-top: -6px; }
     </style>
@@ -348,13 +343,6 @@
         <input id="wager-input" type="number" min="0" placeholder="Amount...">
         <button class="ctrl-btn btn-yellow" onclick="submitWager()">Wager</button>
     </div>
-
-    <!-- Category suggestion: shown on board screen -->
-    <div id="ctrl-cat" class="ctrl-panel">
-        <span class="ctrl-label">Suggest:</span>
-        <input id="cat-input" type="text" maxlength="60" placeholder="Category name..." autocomplete="off">
-        <button class="ctrl-btn btn-green" onclick="submitCategory()">Submit</button>
-    </div>
 </div>
 
 <script>
@@ -420,7 +408,6 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login-name').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
     document.getElementById('guess-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitGuess(); });
     document.getElementById('wager-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitWager(); });
-    document.getElementById('cat-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitCategory(); });
     window.addEventListener('resize', scaleCanvas);
 });
 
@@ -428,21 +415,36 @@ window.addEventListener('DOMContentLoaded', () => {
 function scaleCanvas() {
     const canvas = document.getElementById('canvas');
     const wrap   = document.getElementById('board-wrap');
-    const wW = wrap.clientWidth;
-    const wH = wrap.clientHeight;
+    const wW = wrap.offsetWidth;
+    const wH = wrap.offsetHeight;
     const scale = Math.min(wW / 1920, wH / 1080);
+    const scaledW = Math.round(1920 * scale);
+    const scaledH = Math.round(1080 * scale);
     canvas.style.transform = `scale(${scale})`;
-    canvas.style.width  = '1920px';
-    canvas.style.height = '1080px';
-    // Centre via margin
-    const mL = (wW - 1920 * scale) / 2;
-    const mT = (wH - 1080 * scale) / 2;
-    canvas.style.marginLeft = mL + 'px';
-    canvas.style.marginTop  = mT + 'px';
+    canvas.style.left = Math.round((wW - scaledW) / 2) + 'px';
+    canvas.style.top  = Math.round((wH - scaledH) / 2) + 'px';
 }
 
 // ── FIREBASE LISTENERS ────────────────────────────────────────────────────────
 let pvTimerEnabled   = false;
+
+// ── TYPEWRITER ────────────────────────────────────────────────────────────
+let _typeHandle = null;
+function typeText(el, text, speed = 28) {
+    if (_typeHandle) { clearTimeout(_typeHandle); _typeHandle = null; }
+    el.textContent = '';
+    let i = 0;
+    function tick() {
+        if (i < text.length) {
+            el.textContent += text[i++];
+            _typeHandle = setTimeout(tick, speed);
+        } else { _typeHandle = null; }
+    }
+    tick();
+}
+function clearTypewriter() {
+    if (_typeHandle) { clearTimeout(_typeHandle); _typeHandle = null; }
+}
 let pvTimerSeconds   = 20;
 let pvTimerHandle    = null;
 let pvTimerRemaining = 0;
@@ -545,7 +547,12 @@ function attachListeners() {
                 : `$${clue.value}`;
             document.getElementById('ov-cat').innerText = clue.category || '';
             document.getElementById('ov-val').innerText = valLabel;
-            document.getElementById('ov-txt').innerText = clue.question || '';
+            // Typewriter: only animate if this is a new clue tile
+            if (clue.tileId !== pvActiveTileId) {
+                typeText(document.getElementById('ov-txt'), clue.question || '');
+            } else {
+                document.getElementById('ov-txt').textContent = clue.question || '';
+            }
             overlay.classList.add('active');
             if (clue.tileId !== pvActiveTileId) {
                 pvActiveTileId = clue.tileId;
@@ -586,8 +593,9 @@ function attachListeners() {
             answerOverlay.classList.remove('active');
             pvActiveTileId = null;
             clearPreviewTimer();
+            clearTypewriter();
             // Show cat suggestion if on board screen
-            if (currentScreen === 'board') showCtrl('cat');
+            if (currentScreen === 'board') showCtrl('idle');
             else showCtrl('idle');
         }
     });
@@ -610,7 +618,7 @@ function attachListeners() {
         if (gameArea) gameArea.style.visibility = (currentScreen === 'board') ? '' : 'hidden';
         // Update ctrl bar for board vs other screens
         if (currentScreen === 'board' && (!currentClue || currentClue.status === 'inactive')) {
-            showCtrl('cat');
+            showCtrl('idle');
         } else if (currentScreen === 'firstq') {
             showCtrl('guess');
         } else if (!currentClue || currentClue.status === 'inactive') {
@@ -656,7 +664,7 @@ function attachListeners() {
 
 // ── CONTROL BAR ───────────────────────────────────────────────────────────────
 function showCtrl(mode) {
-    ['idle','guess','wager','cat'].forEach(id => {
+    ['idle','guess','wager'].forEach(id => {
         document.getElementById('ctrl-' + id).classList.toggle('active', id === mode);
     });
     if (mode === 'guess') {
@@ -668,9 +676,6 @@ function showCtrl(mode) {
         const inp = document.getElementById('wager-input');
         inp.value = '';
         inp.focus();
-    }
-    if (mode === 'cat') {
-        document.getElementById('cat-input').value = '';
     }
 }
 
@@ -689,13 +694,6 @@ function submitWager() {
     db.ref('guessInbox').push({ username: _username, type: 'wager', amount, timestamp: Date.now() });
     document.getElementById('wager-input').value = '';
     showCtrl('idle');
-}
-
-function submitCategory() {
-    const text = document.getElementById('cat-input').value.trim();
-    if (!text || !db) return;
-    db.ref('guessInbox').push({ username: _username, text, type: 'category', timestamp: Date.now() });
-    document.getElementById('cat-input').value = '';
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────────────

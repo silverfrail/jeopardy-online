@@ -413,7 +413,6 @@
     <div class="hdr">
         <h1>Jeopardy! Host</h1>
         <span><span class="dot" id="fb-dot"></span><span class="stat-label">Firebase</span></span>
-        <button class="btn-sec btn-sm" onclick="triggerOBSRefresh()">⚡ OBS</button>
         <button class="btn-sec btn-sm" onclick="openSettings()">⚙️ Settings</button>
         <span style="display:flex;align-items:center;gap:5px;">
             <span style="font-size:0.75rem;color:var(--dim);">Room:</span>
@@ -2340,12 +2339,6 @@ function saveLCA() {
     lastCorrectAnswerer = val || null;
     db.ref('boardState/hostSettings/lastCorrectAnswerer').set(val || null);
     log(`DD Player manually set to: ${val || '(cleared)'}`);
-}
-
-function triggerOBSRefresh() {
-    db.ref('refreshTrigger').set(Date.now());
-    window.open('jeopardy_preview.html?room=' + encodeURIComponent(_roomCode), '_blank');
-    log('OBS refresh triggered & preview opened.');
 }
 
 function copyRoomCode() {
