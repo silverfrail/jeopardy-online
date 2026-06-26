@@ -70,6 +70,11 @@
         .timer-bar { height: 100%; border-radius: 3px; transition: width 0.9s linear, background 0.3s; }
         .timer-count { font-size: 2rem; font-weight: 900; color: var(--green); text-align: center; line-height: 1; }
         .timer-count.warn   { color: var(--yellow); }
+
+        /* ── Buzz Status ── */
+        #ac-buzz-status { margin-top: 10px; background: #1a1200; border: 1px solid var(--yellow); border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        #ac-buzz-status .buzz-lbl { font-size: 0.82rem; color: var(--dim); }
+        #ac-buzz-status .buzz-who { font-size: 1rem; font-weight: 800; color: var(--yellow); }
         .timer-count.urgent { color: var(--red);    }
         .timer-label { font-size: 0.65rem; color: var(--dim); text-align: center; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
 
@@ -522,6 +527,15 @@
                         <div class="timer-bar-wrap"><div class="timer-bar" id="ac-timer-bar"></div></div>
                         <div class="timer-count" id="ac-timer-count">20</div>
                         <div class="timer-label">seconds remaining</div>
+                    </div>
+
+                    <!-- Buzz Status -->
+                    <div id="ac-buzz-status" style="display:none;">
+                        <div>
+                            <div class="buzz-lbl">Buzzed in:</div>
+                            <div class="buzz-who" id="ac-buzz-who"></div>
+                        </div>
+                        <button class="btn-sec btn-sm" onclick="clearBuzz()">Reset Buzz</button>
                     </div>
 
                     <!-- Pending Guess -->
@@ -1364,6 +1378,28 @@ function setClueUI(clue) {
     if (srcActive) srcActive.style.display = 'none'; // source shown only on answer-reveal
     if (arDismiss)  arDismiss.style.display  = 'none';
     if (dismissBtn) dismissBtn.style.display = '';
+
+    // Buzz status indicator
+    const buzzStatusEl = document.getElementById('ac-buzz-status');
+    if (buzzStatusEl) {
+        if (clue.buzzedBy && (clue.status === 'active' || clue.status === 'daily-double-active')) {
+            document.getElementById('ac-buzz-who').textContent = clue.buzzedBy;
+            buzzStatusEl.style.display = '';
+        } else {
+            buzzStatusEl.style.display = 'none';
+        }
+    }
+}
+
+function clearBuzz() {
+    if (!activeClue?.buzzedBy) return;
+    const who = activeClue.buzzedBy;
+    db.ref('activeClue').update({
+        buzzedBy: null,
+        buzzedAt: null,
+        ['disqualified/' + who.toLowerCase()]: true
+    });
+    log(`Buzz reset for ${who}.`);
 }
 
 function showPending({ username, text }) {
@@ -1498,6 +1534,14 @@ function judgeGuess(correct) {
                 db.ref('boardState/hostSettings/wrongGuessers').set([...wrongGuessers]);
                 clueScorers.push({ username: guess.username, delta: -deduct, wager: false });
                 log(`✗ ${guess.username} wrong on ${clueContext}.${deduct > 0 ? ` -$${deduct}` : ' No penalty.'}`);
+                // Reset buzz so others can buzz in
+                if (clue.buzzedBy) {
+                    db.ref('activeClue').update({
+                        buzzedBy: null,
+                        buzzedAt: null,
+                        ['disqualified/' + guess.username.toLowerCase()]: true
+                    });
+                }
                 showNextGuess();
                 updateQueueIndicator();
                 if (timerExpired && !pendingGuess && guessQueue.length === 0) {
@@ -2372,6 +2416,23 @@ function processGuess(data) {
     }
 
     if (type === 'category') return; // suggestions panel removed
+
+    // Buzz timeout: player ran out of time to answer
+    if (type === 'buzz-timeout') {
+        if (activeClue?.buzzedBy?.toLowerCase() === username.toLowerCase()) {
+            log(`⏱ ${username} timed out on buzz.`);
+            const deduct = (activeClue.status !== 'daily-double-active' && penaltyRegular) ? activeClue.value : 0;
+            if (deduct > 0) adjustScore(username, -deduct);
+            wrongGuessers.add(username.toLowerCase());
+            db.ref('boardState/hostSettings/wrongGuessers').set([...wrongGuessers]);
+            db.ref('activeClue').update({
+                buzzedBy: null,
+                buzzedAt: null,
+                ['disqualified/' + username.toLowerCase()]: true
+            });
+        }
+        return;
+    }
 
     if (!text) return;
 

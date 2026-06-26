@@ -97,7 +97,7 @@
         .tile-scorer.wrong   { color: #ffaa44; }
 
         /* ─── Clue Overlay ─── */
-        #clue-overlay { position: fixed; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--blue); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: clamp(20px, 6vw, 60px); text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 51; }
+        #clue-overlay { position: fixed; inset: 0; background: rgba(10,10,18,0.98); border: 4px solid var(--blue); display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding: max(40px, 12dvh) clamp(20px, 6vw, 60px) 20px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 51; }
         #clue-overlay.active { opacity: 1; pointer-events: auto; }
 
         /* ─── Daily Double Overlay ─── */
@@ -210,7 +210,7 @@
         #ctrl-idle .idle-room { color: rgba(255,255,255,0.3); font-size: 0.65rem; }
 
         /* Guess state */
-        #ctrl-guess input, #ctrl-wager input {
+        #ctrl-guess input, #ctrl-wager input, #ctrl-buzzed-me input {
             flex: 1;
             padding: 12px 16px;
             font-size: 1.1rem;
@@ -241,6 +241,31 @@
         #ctrl-wager .ctrl-label { color: var(--yellow); font-size: 0.85rem; white-space: nowrap; }
 
         .ctrl-sub { font-size: 0.85rem; color: rgba(255,255,255,0.35); text-align: center; width: 100%; margin-top: -6px; }
+
+        /* Buzz button panel */
+        #ctrl-buzz { flex-direction: column; gap: 4px; align-items: center; }
+        #buzz-btn {
+            padding: 12px 32px; font-size: 1.2rem; font-weight: 900;
+            background: var(--red); color: #fff; border: none; border-radius: 10px;
+            cursor: pointer; text-transform: uppercase; letter-spacing: 0.12em;
+            box-shadow: 0 4px 20px rgba(255,50,50,0.45); transition: transform 0.1s, opacity 0.15s;
+            width: 100%; max-width: 260px;
+        }
+        #buzz-btn:active:not(:disabled) { transform: scale(0.95); }
+        #buzz-btn:disabled { opacity: 0.3; background: #555; box-shadow: none; cursor: default; }
+        .buzz-sub { font-size: 0.7rem; color: rgba(255,255,255,0.35); min-height: 1em; }
+
+        /* Buzzed-me panel */
+        #ctrl-buzzed-me { gap: 8px; }
+        #buzz-countdown { font-size: 1.1rem; font-weight: 900; color: var(--green); min-width: 28px; text-align: center; flex-shrink: 0; }
+        #buzz-countdown.warn   { color: var(--yellow); }
+        #buzz-countdown.urgent { color: var(--red);    }
+        #ctrl-buzzed-me .ctrl-label { color: var(--red); font-size: 0.85rem; white-space: nowrap; }
+
+        /* Buzzed-other panel */
+        #ctrl-buzzed-other { justify-content: center; }
+        .buzz-other-msg  { color: rgba(255,255,255,0.55); font-size: 0.85rem; text-align: center; }
+        .buzz-other-name { color: var(--yellow); font-weight: 700; }
 
         /* ─── Mobile: break canvas out of 1920px scaling ─── */
         @media (max-width: 768px) {
@@ -371,6 +396,25 @@
         <input id="wager-input" type="number" min="0" placeholder="Amount...">
         <button class="ctrl-btn btn-yellow" onclick="submitWager()">Wager</button>
     </div>
+
+    <!-- Buzz: buzzer is live, press to buzz in -->
+    <div id="ctrl-buzz" class="ctrl-panel">
+        <button id="buzz-btn" onclick="submitBuzz()" disabled>BUZZ</button>
+        <div class="buzz-sub" id="buzz-sub"></div>
+    </div>
+
+    <!-- Buzzed-me: I got the buzz, type my answer -->
+    <div id="ctrl-buzzed-me" class="ctrl-panel">
+        <span class="ctrl-label">Answer:</span>
+        <input id="buzz-answer-input" type="text" maxlength="200" placeholder="Type your answer..." autocomplete="off" spellcheck="false">
+        <div id="buzz-countdown">—</div>
+        <button class="ctrl-btn btn-blue" onclick="submitBuzzAnswer()">Submit</button>
+    </div>
+
+    <!-- Buzzed-other: waiting for someone else to answer -->
+    <div id="ctrl-buzzed-other" class="ctrl-panel">
+        <div class="buzz-other-msg"><span class="buzz-other-name" id="buzzed-other-name">—</span> is answering...</div>
+    </div>
 </div>
 
 <script>
@@ -436,7 +480,23 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login-name').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
     document.getElementById('guess-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitGuess(); });
     document.getElementById('wager-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitWager(); });
+    document.getElementById('buzz-answer-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitBuzzAnswer(); });
     window.addEventListener('resize', scaleCanvas);
+
+    // ── iOS keyboard: push ctrl-bar above keyboard using visualViewport ──
+    if (window.visualViewport) {
+        const onVVResize = () => {
+            const keyboardH = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+            const ctrlBar = document.getElementById('ctrl-bar');
+            ctrlBar.style.transform = keyboardH > 30 ? `translateY(-${keyboardH}px)` : '';
+            // Shrink clue overlay bottom so it doesn't sit behind keyboard
+            document.getElementById('clue-overlay').style.bottom    = keyboardH > 30 ? keyboardH + 'px' : '';
+            document.getElementById('dd-overlay').style.bottom      = keyboardH > 30 ? keyboardH + 'px' : '';
+            document.getElementById('answer-overlay').style.bottom  = keyboardH > 30 ? keyboardH + 'px' : '';
+        };
+        window.visualViewport.addEventListener('resize', onVVResize);
+        window.visualViewport.addEventListener('scroll', onVVResize);
+    }
 });
 
 // ── CANVAS SCALING ────────────────────────────────────────────────────────────
@@ -468,7 +528,7 @@ let pvTimerEnabled   = false;
 
 // ── TYPEWRITER ────────────────────────────────────────────────────────────
 let _typeHandle = null;
-function typeText(el, text, speed = 28) {
+function typeText(el, text, speed = 28, onComplete = null) {
     if (_typeHandle) { clearTimeout(_typeHandle); _typeHandle = null; }
     el.textContent = '';
     let i = 0;
@@ -476,7 +536,10 @@ function typeText(el, text, speed = 28) {
         if (i < text.length) {
             el.textContent += text[i++];
             _typeHandle = setTimeout(tick, speed);
-        } else { _typeHandle = null; }
+        } else {
+            _typeHandle = null;
+            if (onComplete) onComplete();
+        }
     }
     tick();
 }
@@ -487,6 +550,10 @@ let pvTimerSeconds   = 20;
 let pvTimerHandle    = null;
 let pvTimerRemaining = 0;
 let pvActiveTileId   = null;
+let _canBuzz            = false;
+let _ctrlMode           = 'idle';
+let _buzzCountdownHandle = null;
+let _buzzAnswered       = false; // true after submitting buzz answer (stay in idle until buzz resets)
 let pvDDWagerTimeout   = 60;
 let pvDDWagerHandle    = null;
 let pvDDWagerRemaining = 0;
@@ -588,7 +655,11 @@ function attachListeners() {
             document.getElementById('ov-val').innerText = valLabel;
             // Typewriter: only animate if this is a new clue tile
             if (clue.tileId !== pvActiveTileId) {
-                typeText(document.getElementById('ov-txt'), clue.question || '');
+                _canBuzz = false;
+                _buzzAnswered = false;
+                stopBuzzCountdown();
+                typeText(document.getElementById('ov-txt'), clue.question || '', 28,
+                    () => { if (currentClue?.status === 'active') enableBuzz(); });
             } else {
                 document.getElementById('ov-txt').textContent = clue.question || '';
             }
@@ -600,7 +671,7 @@ function attachListeners() {
                 const elapsed = clue.clueStartedAt ? (Date.now() - clue.clueStartedAt) / 1000 : 0;
                 requestAnimationFrame(() => startPreviewTimer(elapsed));
             }
-            // Show guess input — but not if it's DD-active and player isn't the DD player
+            // Show ctrl based on clue type and buzzer state
             if (clue.status === 'daily-double-active') {
                 if (clue.ddPlayer && clue.ddPlayer.toLowerCase() === _userKey) {
                     showCtrl('guess');
@@ -608,7 +679,31 @@ function attachListeners() {
                     showCtrl('idle');
                 }
             } else {
-                showCtrl('guess');
+                // Regular clue: buzzer flow
+                const buzzedBy     = clue.buzzedBy || null;
+                const disqualified = !!(clue.disqualified?.[_userKey]);
+                if (buzzedBy === _username) {
+                    if (_ctrlMode !== 'buzzed-me' && !_buzzAnswered) showCtrl('buzzed-me');
+                } else if (buzzedBy) {
+                    document.getElementById('buzzed-other-name').textContent = buzzedBy;
+                    showCtrl('buzzed-other');
+                } else if (_canBuzz) {
+                    // Buzz was cleared (wrong answer or reset) — reset answered flag
+                    _buzzAnswered = false;
+                    const btn = document.getElementById('buzz-btn');
+                    const sub = document.getElementById('buzz-sub');
+                    if (disqualified) {
+                        if (btn) btn.disabled = true;
+                        if (sub) sub.textContent = 'Locked out';
+                    } else {
+                        if (btn) btn.disabled = false;
+                        if (sub) sub.textContent = '';
+                    }
+                    if (_ctrlMode !== 'buzz') showCtrl('buzz');
+                } else {
+                    // Typewriter still running — stay idle until enableBuzz() fires
+                    showCtrl('idle');
+                }
             }
         } else if (clue?.status === 'answer-reveal') {
             ddOverlay.classList.remove('active');
@@ -633,9 +728,11 @@ function attachListeners() {
             pvActiveTileId = null;
             clearPreviewTimer();
             clearTypewriter();
-            // Show cat suggestion if on board screen
-            if (currentScreen === 'board') showCtrl('idle');
-            else showCtrl('idle');
+            _canBuzz = false;
+            _buzzAnswered = false;
+            stopBuzzCountdown();
+            _ctrlMode = ''; // force ctrl re-render on next update
+            showCtrl('idle');
         }
     });
 
@@ -703,15 +800,18 @@ function attachListeners() {
 
 // ── CONTROL BAR ───────────────────────────────────────────────────────────────
 function showCtrl(mode) {
-    ['idle','guess','wager'].forEach(id => {
+    if (_ctrlMode === mode) return;
+    _ctrlMode = mode;
+    ['idle','guess','wager','buzz','buzzed-me','buzzed-other'].forEach(id => {
         document.getElementById('ctrl-' + id).classList.toggle('active', id === mode);
     });
-    if (mode === 'guess') {
-        document.getElementById('guess-input').value = '';
+    if (mode === 'guess')      document.getElementById('guess-input').value = '';
+    if (mode === 'wager')      document.getElementById('wager-input').value = '';
+    if (mode === 'buzzed-me') {
+        document.getElementById('buzz-answer-input').value = '';
+        startBuzzCountdown();
     }
-    if (mode === 'wager') {
-        document.getElementById('wager-input').value = '';
-    }
+    if (mode !== 'buzzed-me')  stopBuzzCountdown();
 }
 
 // ── SUBMISSIONS ───────────────────────────────────────────────────────────────
@@ -729,6 +829,75 @@ function submitWager() {
     db.ref('guessInbox').push({ username: _username, type: 'wager', amount, timestamp: Date.now() });
     document.getElementById('wager-input').value = '';
     showCtrl('idle');
+}
+
+// ── BUZZER ────────────────────────────────────────────────────────────────────
+function enableBuzz() {
+    _canBuzz = true;
+    const buzzedBy     = currentClue?.buzzedBy;
+    const disqualified = !!(currentClue?.disqualified?.[_userKey]);
+    if (buzzedBy) return; // someone already buzzed; listener will update UI
+    const btn = document.getElementById('buzz-btn');
+    const sub = document.getElementById('buzz-sub');
+    if (disqualified) {
+        if (btn) btn.disabled = true;
+        if (sub) sub.textContent = 'Locked out';
+    } else {
+        if (btn) btn.disabled = false;
+        if (sub) sub.textContent = '';
+    }
+    _ctrlMode = ''; // force showCtrl to re-render
+    showCtrl('buzz');
+}
+
+function submitBuzz() {
+    if (!_canBuzz || !db) return;
+    document.getElementById('buzz-btn').disabled = true;
+    _baseDb.ref('rooms/' + _roomCode + '/activeClue').transaction(clue => {
+        if (!clue || clue.buzzedBy != null) return undefined;
+        return { ...clue, buzzedBy: _username, buzzedAt: Date.now() };
+    }).catch(() => {
+        if (_canBuzz) document.getElementById('buzz-btn').disabled = false;
+    });
+}
+
+function submitBuzzAnswer() {
+    const text = document.getElementById('buzz-answer-input').value.trim();
+    if (!text || !db) return;
+    stopBuzzCountdown();
+    _buzzAnswered = true;
+    db.ref('guessInbox').push({ username: _username, text, type: 'buzz-answer', timestamp: Date.now() });
+    document.getElementById('buzz-answer-input').value = '';
+    _ctrlMode = ''; // allow transition from buzzed-me to idle
+    showCtrl('idle');
+}
+
+function startBuzzCountdown() {
+    stopBuzzCountdown();
+    if (!pvTimerEnabled || pvTimerSeconds <= 0) return;
+    let remaining = pvTimerSeconds;
+    const el = document.getElementById('buzz-countdown');
+    function tick() {
+        if (!el) return;
+        el.textContent = remaining;
+        el.className = remaining <= 5 ? 'urgent' : remaining <= 10 ? 'warn' : '';
+        if (remaining <= 0) {
+            if (db) db.ref('guessInbox').push({ username: _username, type: 'buzz-timeout', timestamp: Date.now() });
+            _buzzAnswered = true; // treated as submitted, stay in idle
+            _ctrlMode = ''; // allow transition
+            showCtrl('idle');
+            return;
+        }
+        remaining--;
+        _buzzCountdownHandle = setTimeout(tick, 1000);
+    }
+    tick();
+}
+
+function stopBuzzCountdown() {
+    if (_buzzCountdownHandle) { clearTimeout(_buzzCountdownHandle); _buzzCountdownHandle = null; }
+    const el = document.getElementById('buzz-countdown');
+    if (el) { el.textContent = '—'; el.className = ''; }
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────────────
