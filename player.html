@@ -15,7 +15,7 @@
             --panel:  #080a1a;
             --yellow: #ffe94d;
             --red:    #ff4444;
-            --ctrl-h: 110px;
+            --ctrl-h: 40px;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -205,9 +205,9 @@
         .ctrl-panel.active { display: flex; }
 
         /* Idle state */
-        #ctrl-idle { flex-direction: column; gap: 6px; }
-        #ctrl-idle .idle-name { color: rgba(255,255,255,0.35); font-size: 0.9rem; text-align: center; }
-        #ctrl-idle .idle-room { color: rgba(255,255,255,0.2); font-size: 0.8rem; text-align: center; }
+        #ctrl-idle { flex-direction: row; justify-content: space-between; width: 100%; }
+        #ctrl-idle .idle-name { color: rgba(255,255,255,0.3); font-size: 0.65rem; }
+        #ctrl-idle .idle-room { color: rgba(255,255,255,0.3); font-size: 0.65rem; }
 
         /* Guess state */
         #ctrl-guess input, #ctrl-wager input {
