@@ -1993,6 +1993,7 @@ function initListeners() {
                 lastClueStatus   = data.status;
                 clueScorers = [];
                 _currentBuzzWindowEndsAt = null;
+                timerExpired = false; // reset from previous clue before startClueTimer is called
                 clearClueTimer();
                 clearBuzzWindowTimer();
                 if (data.status === 'daily-double-active') {
