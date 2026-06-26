@@ -250,7 +250,10 @@
             cursor: pointer; text-transform: uppercase; letter-spacing: 0.12em;
             box-shadow: 0 4px 20px rgba(255,50,50,0.45); transition: transform 0.1s, opacity 0.15s;
             width: 100%; max-width: 260px;
+            display: flex; flex-direction: column; align-items: center; gap: 0;
         }
+        .buzz-label { font-size: 1.2rem; font-weight: 900; letter-spacing: 0.12em; }
+        #buzz-window-num { display: none; font-size: 2.4rem; font-weight: 900; line-height: 0.85; margin-top: 4px; }
         #buzz-btn:active:not(:disabled) { transform: scale(0.95); }
         #buzz-btn:disabled { opacity: 0.3; background: #555; box-shadow: none; cursor: default; }
         .buzz-sub { font-size: 0.7rem; color: rgba(255,255,255,0.35); min-height: 1em; }
@@ -399,7 +402,7 @@
 
     <!-- Buzz: buzzer is live, press to buzz in -->
     <div id="ctrl-buzz" class="ctrl-panel">
-        <button id="buzz-btn" onclick="submitBuzz()" disabled>BUZZ</button>
+        <button id="buzz-btn" onclick="submitBuzz()" disabled><span class="buzz-label">BUZZ</span><span id="buzz-window-num"></span></button>
         <div class="buzz-sub" id="buzz-sub"></div>
     </div>
 
@@ -554,6 +557,8 @@ let _canBuzz            = false;
 let _ctrlMode           = 'idle';
 let _buzzCountdownHandle = null;
 let _buzzAnswered       = false; // true after submitting buzz answer (stay in idle until buzz resets)
+let _buzzWindowHandle   = null;
+let _currentBuzzWindowEndsAt = null;
 let pvDDWagerTimeout   = 60;
 let pvDDWagerHandle    = null;
 let pvDDWagerRemaining = 0;
@@ -657,7 +662,9 @@ function attachListeners() {
             if (clue.tileId !== pvActiveTileId) {
                 _canBuzz = false;
                 _buzzAnswered = false;
+                _currentBuzzWindowEndsAt = null;
                 stopBuzzCountdown();
+                stopBuzzWindowCountdown();
                 typeText(document.getElementById('ov-txt'), clue.question || '', 28,
                     () => { if (currentClue?.status === 'active') enableBuzz(); });
             } else {
@@ -683,8 +690,10 @@ function attachListeners() {
                 const buzzedBy     = clue.buzzedBy || null;
                 const disqualified = !!(clue.disqualified?.[_userKey]);
                 if (buzzedBy === _username) {
+                    stopBuzzWindowCountdown();
                     if (_ctrlMode !== 'buzzed-me' && !_buzzAnswered) showCtrl('buzzed-me');
                 } else if (buzzedBy) {
+                    stopBuzzWindowCountdown();
                     document.getElementById('buzzed-other-name').textContent = buzzedBy;
                     showCtrl('buzzed-other');
                 } else if (_canBuzz) {
@@ -698,6 +707,11 @@ function attachListeners() {
                     } else {
                         if (btn) btn.disabled = false;
                         if (sub) sub.textContent = '';
+                        // Restart buzz window countdown if endsAt changed
+                        if (clue.buzzWindowEndsAt && clue.buzzWindowEndsAt !== _currentBuzzWindowEndsAt) {
+                            _currentBuzzWindowEndsAt = clue.buzzWindowEndsAt;
+                            startBuzzWindowCountdown(clue.buzzWindowEndsAt);
+                        }
                     }
                     if (_ctrlMode !== 'buzz') showCtrl('buzz');
                 } else {
@@ -730,7 +744,9 @@ function attachListeners() {
             clearTypewriter();
             _canBuzz = false;
             _buzzAnswered = false;
+            _currentBuzzWindowEndsAt = null;
             stopBuzzCountdown();
+            stopBuzzWindowCountdown();
             _ctrlMode = ''; // force ctrl re-render on next update
             showCtrl('idle');
         }
@@ -845,6 +861,11 @@ function enableBuzz() {
     } else {
         if (btn) btn.disabled = false;
         if (sub) sub.textContent = '';
+        // Start buzz window countdown if enabled
+        if (currentClue?.buzzWindowEndsAt) {
+            _currentBuzzWindowEndsAt = currentClue.buzzWindowEndsAt;
+            startBuzzWindowCountdown(currentClue.buzzWindowEndsAt);
+        }
     }
     _ctrlMode = ''; // force showCtrl to re-render
     showCtrl('buzz');
@@ -898,6 +919,31 @@ function stopBuzzCountdown() {
     if (_buzzCountdownHandle) { clearTimeout(_buzzCountdownHandle); _buzzCountdownHandle = null; }
     const el = document.getElementById('buzz-countdown');
     if (el) { el.textContent = '—'; el.className = ''; }
+}
+
+function startBuzzWindowCountdown(endsAt) {
+    stopBuzzWindowCountdown();
+    if (!endsAt) return;
+    const num = document.getElementById('buzz-window-num');
+    function tick() {
+        const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+        if (num) { num.textContent = remaining > 0 ? String(remaining) : ''; num.style.display = remaining > 0 ? '' : 'none'; }
+        if (remaining <= 0) {
+            // Buzz window closed — disable button but keep buzz panel visible
+            const btn = document.getElementById('buzz-btn');
+            if (btn && !currentClue?.buzzedBy) { btn.disabled = true; }
+            _canBuzz = false;
+            return;
+        }
+        _buzzWindowHandle = setTimeout(tick, 300);
+    }
+    tick();
+}
+
+function stopBuzzWindowCountdown() {
+    if (_buzzWindowHandle) { clearTimeout(_buzzWindowHandle); _buzzWindowHandle = null; }
+    const num = document.getElementById('buzz-window-num');
+    if (num) { num.textContent = ''; num.style.display = 'none'; }
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────────────
